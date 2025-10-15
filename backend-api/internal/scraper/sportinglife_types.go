@@ -11,7 +11,8 @@ type SportingLifeProps struct {
 }
 
 type SportingLifePageProps struct {
-	Meetings []SportingLifeMeeting `json:"meetings"`
+	Meetings []SportingLifeMeeting `json:"meetings,omitempty"` // For main racecards page
+	Race     *SportingLifeRace     `json:"race,omitempty"`     // For individual race page
 }
 
 type SportingLifeMeeting struct {
@@ -79,6 +80,14 @@ type SportingLifeRide struct {
 	Trainer          *SportingLifeBusiness       `json:"trainer,omitempty"`
 	Owner            *SportingLifeOwner          `json:"owner,omitempty"`
 	Betting          *SportingLifeBetting        `json:"betting,omitempty"`
+	Commentary       string                      `json:"commentary,omitempty"` // Runner comments
+	Headgear         []SportingLifeHeadgear      `json:"headgear,omitempty"`
+}
+
+type SportingLifeHeadgear struct {
+	Symbol string `json:"symbol"` // "b", "t", "p", "v", etc.
+	Name   string `json:"name"`   // "Blinkers", "Tongue strap", etc.
+	Count  int    `json:"count"`  // How many times worn
 }
 
 type SportingLifeHorse struct {
@@ -87,6 +96,7 @@ type SportingLifeHorse struct {
 	Age            int                   `json:"age"`
 	Sex            *SportingLifeSex      `json:"sex,omitempty"`
 	FormSummary    *SportingLifeForm     `json:"formsummary,omitempty"`
+	LastRanDays    int                   `json:"last_ran_days,omitempty"`
 }
 
 type SportingLifeSex struct {
@@ -115,4 +125,3 @@ type SportingLifeBetting struct {
 	CurrentOdds   string `json:"current_odds"`
 	StartingPrice string `json:"starting_price,omitempty"`
 }
-

@@ -56,9 +56,14 @@ func (s *AutoUpdateService) RunInBackground() {
 
 		// Calculate dates to backfill (from last_date+1 to yesterday)
 		yesterday := time.Now().AddDate(0, 0, -1)
+
+		// Always fetch today and tomorrow (even if historical is up to date)
+		defer s.handleTodaysRaces()
+
 		if lastDate.After(yesterday) || lastDate.Equal(yesterday) {
 			log.Printf("[AutoUpdate] ✅ Database is up to date (last: %s, yesterday: %s)",
 				lastDate.Format("2006-01-02"), yesterday.Format("2006-01-02"))
+			log.Println("[AutoUpdate] Proceeding to fetch today/tomorrow...")
 			return
 		}
 
@@ -95,9 +100,6 @@ func (s *AutoUpdateService) RunInBackground() {
 		}
 
 		log.Printf("[AutoUpdate] 🎉 Backfill complete! Success: %d, Failed: %d", successCount, failureCount)
-
-		// After backfilling yesterday, handle today's races
-		s.handleTodaysRaces()
 	}()
 }
 
@@ -160,10 +162,10 @@ func (s *AutoUpdateService) handleTodaysRaces() {
 func (s *AutoUpdateService) backfillRacecards(dateStr string) (int, int, error) {
 	// Check which data source to use
 	useSportingLife := os.Getenv("USE_SPORTING_LIFE") != "false" // Default true
-	
+
 	var rpRaces []scraper.Race
 	var err error
-	
+
 	if useSportingLife {
 		// Use Sporting Life (preferred - gets all races in 1 request)
 		log.Printf("[AutoUpdate]   [1/2] Fetching racecards from Sporting Life for %s...", dateStr)
@@ -171,7 +173,7 @@ func (s *AutoUpdateService) backfillRacecards(dateStr string) (int, int, error) 
 		rpRaces, err = slScraper.GetRacesForDate(dateStr)
 		if err != nil {
 			log.Printf("[AutoUpdate]   ⚠️  Sporting Life failed: %v", err)
-			
+
 			// Fallback to Racing Post if enabled
 			if os.Getenv("USE_RACING_POST") == "true" {
 				log.Printf("[AutoUpdate]   Falling back to Racing Post...")
@@ -193,7 +195,7 @@ func (s *AutoUpdateService) backfillRacecards(dateStr string) (int, int, error) 
 			return 0, 0, fmt.Errorf("scrape racecards failed: %w", err)
 		}
 	}
-	
+
 	log.Printf("[AutoUpdate]   ✓ Got %d UK/IRE races", len(rpRaces))
 
 	// Insert to database (without Betfair prices initially)
@@ -241,7 +243,7 @@ func (s *AutoUpdateService) startLivePrices(dateStr string) error {
 	// Discover markets
 	log.Println("[AutoUpdate] Discovering Betfair markets...")
 	matcher := betfair.NewMatcher(bfClient)
-	
+
 	ctx := context.Background()
 	markets, err := matcher.FindTodaysMarkets(ctx, dateStr)
 	if err != nil {
@@ -314,8 +316,9 @@ func (s *AutoUpdateService) getLastDateInDatabase() (time.Time, error) {
 
 // backfillDate runs the full pipeline for a single date (using backfill_dates logic)
 func (s *AutoUpdateService) backfillDate(dateStr string) (int, int, error) {
-	// Step 1: Scrape Racing Post
-	log.Printf("[AutoUpdate]   [1/4] Scraping Racing Post for %s...", dateStr)
+	// For historical dates, always use Racing Post results
+	// Sporting Life only works for today/tomorrow (redirects old dates)
+	log.Printf("[AutoUpdate]   [1/4] Scraping Racing Post results for %s...", dateStr)
 	rpScraper := scraper.NewResultsScraper()
 	rpRaces, err := rpScraper.ScrapeDate(dateStr)
 	if err != nil {
@@ -711,7 +714,7 @@ func (s *AutoUpdateService) upsertDimensions(tx *sql.Tx, races []scraper.Race) e
 		if race.Course != "" {
 			courses[strings.TrimSpace(race.Course)] = race.Region
 		}
-		
+
 		for _, runner := range race.Runners {
 			if runner.Horse != "" {
 				horses[strings.TrimSpace(runner.Horse)] = true
@@ -814,7 +817,7 @@ func (s *AutoUpdateService) populateForeignKeys(tx *sql.Tx, races []scraper.Race
 		if race.Course != "" {
 			courses[strings.TrimSpace(race.Course)] = true
 		}
-		
+
 		for _, runner := range race.Runners {
 			if runner.Horse != "" {
 				horses[strings.TrimSpace(runner.Horse)] = true
@@ -897,7 +900,7 @@ func (s *AutoUpdateService) populateForeignKeys(tx *sql.Tx, races []scraper.Race
 		if id, ok := courseIDs[strings.TrimSpace(races[i].Course)]; ok {
 			races[i].CourseID = int(id)
 		}
-		
+
 		for j := range races[i].Runners {
 			runner := &races[i].Runners[j]
 
