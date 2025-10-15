@@ -1,0 +1,175 @@
+=== RUN   TestA01_HealthOK
+    comprehensive_test.go:60: A01: Health endpoint returns OK
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:76: ✅ Health check passed
+--- PASS: TestA01_HealthOK (0.00s)
+=== RUN   TestA02_CORSPreflight
+    comprehensive_test.go:80: A02: CORS preflight request
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:103: ✅ CORS headers present
+--- PASS: TestA02_CORSPreflight (0.00s)
+=== RUN   TestA03_JSONContentType
+    comprehensive_test.go:107: A03: JSON content type header
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:115: ✅ Content-Type is application/json
+--- PASS: TestA03_JSONContentType (0.00s)
+=== RUN   TestA04_Graceful404
+    comprehensive_test.go:119: A04: Graceful 404 handling
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:128: 404 should return JSON
+    comprehensive_test.go:136: ✅ 404 handled gracefully
+--- FAIL: TestA04_Graceful404 (0.00s)
+=== RUN   TestA05_SQLInjectionResilience
+    comprehensive_test.go:140: A05: SQL injection resilience
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:156: ✅ SQL injection blocked safely
+--- PASS: TestA05_SQLInjectionResilience (0.00s)
+=== RUN   TestB01_GlobalSearchBasic
+    comprehensive_test.go:162: B01: Global search basic structure
+    comprehensive_test.go:53:   Latency: 17 ms
+    comprehensive_test.go:189: ✅ Found 16 total results
+--- PASS: TestB01_GlobalSearchBasic (0.02s)
+=== RUN   TestB02_TrigramTolerance
+    comprehensive_test.go:193: B02: Trigram tolerance (typo handling)
+    comprehensive_test.go:53:   Latency: 9 ms
+    comprehensive_test.go:210: ✅ Top match: Frankel (GB) (score: 0.36)
+--- PASS: TestB02_TrigramTolerance (0.01s)
+=== RUN   TestB03_LimitEnforcement
+    comprehensive_test.go:215: B03: Limit parameter enforcement
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:219: Expected 200, got 400
+--- FAIL: TestB03_LimitEnforcement (0.00s)
+=== RUN   TestB04_CommentFTSPhrase
+    comprehensive_test.go:239: B04: Comment FTS phrase search
+    comprehensive_test.go:53:   Latency: 5150 ms
+    comprehensive_test.go:261: ✅ Found 5 comment results
+--- PASS: TestB04_CommentFTSPhrase (5.15s)
+=== RUN   TestC01_RacesOnDate
+    comprehensive_test.go:267: C01: Races on a specific date
+    comprehensive_test.go:53:   Latency: 2 ms
+    comprehensive_test.go:292: ✅ Found 47 races on 2024-01-01
+--- PASS: TestC01_RacesOnDate (0.00s)
+=== RUN   TestC02_RaceDetail
+    comprehensive_test.go:296: C02: Single race detail
+    comprehensive_test.go:53:   Latency: 461 ms
+    comprehensive_test.go:319: ✅ Race: Southwell Racecourse Supporting Racing Staff Week Handicap Hurdle, Ran: 12
+--- PASS: TestC02_RaceDetail (0.46s)
+=== RUN   TestC03_RaceRunnersCountEqualsRan
+    comprehensive_test.go:323: C03: Race runners count equals ran
+    comprehensive_test.go:53:   Latency: 224 ms
+    comprehensive_test.go:338: ✅ Runners count (12) matches ran (12)
+--- PASS: TestC03_RaceRunnersCountEqualsRan (0.22s)
+=== RUN   TestC04_WinnerInvariants
+    comprehensive_test.go:342: C04: Winner invariants
+    comprehensive_test.go:53:   Latency: 206 ms
+    comprehensive_test.go:375: ✅ Winner invariants satisfied
+--- PASS: TestC04_WinnerInvariants (0.21s)
+=== RUN   TestC05_DateRangeSearch
+    comprehensive_test.go:379: C05: Date range search
+    comprehensive_test.go:53:   Latency: 1 ms
+    comprehensive_test.go:397: ✅ All 62 races within date range
+--- PASS: TestC05_DateRangeSearch (0.00s)
+=== RUN   TestC06_RaceFiltersCourseAndType
+    comprehensive_test.go:401: C06: Race filters - course and type
+    comprehensive_test.go:53:   Latency: 34 ms
+    comprehensive_test.go:421: ✅ Filters applied: 50 races
+--- PASS: TestC06_RaceFiltersCourseAndType (0.04s)
+=== RUN   TestC07_FieldSizeFilter
+    comprehensive_test.go:425: C07: Field size filter
+    comprehensive_test.go:53:   Latency: 32 ms
+    comprehensive_test.go:442: ✅ Field size filter applied
+--- PASS: TestC07_FieldSizeFilter (0.03s)
+=== RUN   TestC08_CoursesList
+    comprehensive_test.go:446: C08: Courses list
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:468: ✅ Found 89 courses
+--- PASS: TestC08_CoursesList (0.00s)
+=== RUN   TestC09_CourseMeetings
+    comprehensive_test.go:472: C09: Course meetings
+    comprehensive_test.go:53:   Latency: 1 ms
+    comprehensive_test.go:489: ✅ Found 0 meetings
+--- PASS: TestC09_CourseMeetings (0.00s)
+=== RUN   TestD01_HorseProfileBasic
+    comprehensive_test.go:495: D01: Horse profile basic structure
+    comprehensive_test.go:53:   Latency: 1066 ms
+    comprehensive_test.go:521: ✅ Profile: 200 runs, 18 wins
+--- PASS: TestD01_HorseProfileBasic (1.07s)
+=== RUN   TestD02_TrainerProfileBasic
+    comprehensive_test.go:525: D02: Trainer profile basic structure
+    comprehensive_test.go:53:   Latency: 709 ms
+    comprehensive_test.go:548: ✅ Trainer profile loaded with 3 form periods
+--- PASS: TestD02_TrainerProfileBasic (0.71s)
+=== RUN   TestD03_JockeyProfileBasic
+    comprehensive_test.go:552: D03: Jockey profile basic structure
+    comprehensive_test.go:53:   Latency: 492 ms
+    comprehensive_test.go:578: ✅ Jockey profile loaded
+--- PASS: TestD03_JockeyProfileBasic (0.49s)
+=== RUN   TestE01_SteamersAndDrifters
+    comprehensive_test.go:584: E01: Steamers and drifters
+    comprehensive_test.go:53:   Latency: 161 ms
+    comprehensive_test.go:602:   Steamer: Light Speed (IRE) (55.00 -> 15.50)
+    comprehensive_test.go:602:   Steamer: Breakdance Kid (GB) (22.00 -> 6.60)
+    comprehensive_test.go:602:   Steamer: West End Charmer (IRE) (110.00 -> 33.12)
+    comprehensive_test.go:610: ✅ Found 100 movers
+--- PASS: TestE01_SteamersAndDrifters (0.16s)
+=== RUN   TestE02_WinCalibration
+    comprehensive_test.go:614: E02: Win market calibration
+    comprehensive_test.go:53:   Latency: 2341 ms
+    comprehensive_test.go:639: ✅ Calibration: 6 bins
+--- PASS: TestE02_WinCalibration (2.34s)
+=== RUN   TestE03_PlaceCalibration
+    comprehensive_test.go:643: E03: Place market calibration
+    comprehensive_test.go:53:   Latency: 2491 ms
+    comprehensive_test.go:660: ✅ Place calibration: 5 bins
+--- PASS: TestE03_PlaceCalibration (2.49s)
+=== RUN   TestE04_InPlayMoves
+    comprehensive_test.go:664: E04: In-play price movements
+    comprehensive_test.go:53:   Latency: 161 ms
+    comprehensive_test.go:686: ✅ In-play moves analyzed
+--- PASS: TestE04_InPlayMoves (0.16s)
+=== RUN   TestE05_BookVsExchange
+    comprehensive_test.go:690: E05: Book vs Exchange comparison
+    comprehensive_test.go:53:   Latency: 1804 ms
+    comprehensive_test.go:702: ✅ Book vs Exchange: 2 daily comparisons
+--- PASS: TestE05_BookVsExchange (1.80s)
+=== RUN   TestF01_DrawBias
+    comprehensive_test.go:709: F01: Draw bias analysis
+    comprehensive_test.go:53:   Latency: 1381 ms
+    comprehensive_test.go:731: ✅ Draw bias: 0 draw positions analyzed
+--- PASS: TestF01_DrawBias (1.38s)
+=== RUN   TestF02_RecencyAnalysis
+    comprehensive_test.go:735: F02: Recency (DSR) analysis
+    comprehensive_test.go:53:   Latency: 1635 ms
+    comprehensive_test.go:755: ✅ Recency: 0 DSR buckets
+--- PASS: TestF02_RecencyAnalysis (1.64s)
+=== RUN   TestF03_TrainerChangeImpact
+    comprehensive_test.go:759: F03: Trainer change impact
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:764: Expected 200, got 500
+--- FAIL: TestF03_TrainerChangeImpact (0.00s)
+=== RUN   TestG01_BadParams400
+    comprehensive_test.go:782: G01: Bad parameters return 400
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:787: Bad date should not cause 500 error
+    comprehensive_test.go:790: ✅ Bad parameters handled
+--- FAIL: TestG01_BadParams400 (0.00s)
+=== RUN   TestG02_NonExistentID404
+    comprehensive_test.go:794: G02: Non-existent IDs return 404
+    comprehensive_test.go:53:   Latency: 33 ms
+    comprehensive_test.go:806: ✅ Non-existent IDs return clean 404
+--- PASS: TestG02_NonExistentID404 (0.03s)
+=== RUN   TestG03_LimitsCapped
+    comprehensive_test.go:810: G03: Limits are capped to server maximum
+    comprehensive_test.go:53:   Latency: 661 ms
+    comprehensive_test.go:822: Limit should be capped to server maximum
+    comprehensive_test.go:825: ✅ Results capped to 100000 items
+--- FAIL: TestG03_LimitsCapped (1.20s)
+=== RUN   TestG04_EmptyResultsValid
+    comprehensive_test.go:829: G04: Empty results are valid
+    comprehensive_test.go:53:   Latency: 1 ms
+    comprehensive_test.go:849: ✅ Empty results handled correctly
+--- PASS: TestG04_EmptyResultsValid (0.00s)
+FAIL
+FAIL	giddyup/api/tests	19.655s
+FAIL

@@ -1,0 +1,36 @@
+# Binaries
+backend-api/bin/
+mapper/bin/
+
+# Logs
+backend-api/logs/*.log
+*.log
+
+# Data files (too large for git)
+data/
+postgres/db_backup.sql
+postgres/db_backup_*.sql
+
+# Temporary files
+*.tmp
+*.bak
+/tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.exe
+*.o
+*.so
+
+# Go
+vendor/
+

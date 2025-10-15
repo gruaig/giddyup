@@ -1,0 +1,22 @@
+=== RUN   TestAngle_Today_Basic
+    angle_test.go:19: Angle Today: Basic hit
+    comprehensive_test.go:44: Failed to make request: Get "http://localhost:8000/api/v1/angles/near-miss-no-hike/today?on=2024-01-13&limit=50": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+--- FAIL: TestAngle_Today_Basic (30.02s)
+=== RUN   TestAngle_Today_IncludeNullOR
+    angle_test.go:71: Angle Today: Include null OR filter
+    comprehensive_test.go:44: Failed to make request: Get "http://localhost:8000/api/v1/angles/near-miss-no-hike/today?on=2024-01-13&include_null_or=false": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+--- FAIL: TestAngle_Today_IncludeNullOR (30.10s)
+=== RUN   TestAngle_Today_DistanceTolerance
+    angle_test.go:98: Angle Today: Distance tolerance
+    comprehensive_test.go:44: Failed to make request: Get "http://localhost:8000/api/v1/angles/near-miss-no-hike/today?on=2024-01-13&dist_f_tolerance=0": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+--- FAIL: TestAngle_Today_DistanceTolerance (30.05s)
+=== RUN   TestAngle_Today_SameSurfaceFilter
+    angle_test.go:124: Angle Today: Same surface filter
+    comprehensive_test.go:44: Failed to make request: Get "http://localhost:8000/api/v1/angles/near-miss-no-hike/today?on=2024-01-13&same_surface=true": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+--- FAIL: TestAngle_Today_SameSurfaceFilter (30.10s)
+=== RUN   TestAngle_Today_Pagination
+    angle_test.go:150: Angle Today: Pagination
+    comprehensive_test.go:44: Failed to make request: Get "http://localhost:8000/api/v1/angles/near-miss-no-hike/today?on=2024-01-13&limit=10&offset=0": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+--- FAIL: TestAngle_Today_Pagination (30.10s)
+=== RUN   TestAngle_Today_Performance
+    angle_test.go:175: Angle Today: Performance test

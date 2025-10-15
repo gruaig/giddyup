@@ -1,0 +1,26 @@
+--- FAIL: TestA04_Graceful404 (0.00s)
+    comprehensive_test.go:119: A04: Graceful 404 handling
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:128: 404 should return JSON
+    comprehensive_test.go:136: ✅ 404 handled gracefully
+--- FAIL: TestB03_LimitEnforcement (0.00s)
+    comprehensive_test.go:215: B03: Limit parameter enforcement
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:219: Expected 200, got 400
+--- FAIL: TestF03_TrainerChangeImpact (0.00s)
+    comprehensive_test.go:759: F03: Trainer change impact
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:764: Expected 200, got 500
+--- FAIL: TestG01_BadParams400 (0.00s)
+    comprehensive_test.go:782: G01: Bad parameters return 400
+    comprehensive_test.go:53:   Latency: 0 ms
+    comprehensive_test.go:787: Bad date should not cause 500 error
+    comprehensive_test.go:790: ✅ Bad parameters handled
+--- FAIL: TestG03_LimitsCapped (1.12s)
+    comprehensive_test.go:810: G03: Limits are capped to server maximum
+    comprehensive_test.go:53:   Latency: 581 ms
+    comprehensive_test.go:822: Limit should be capped to server maximum
+    comprehensive_test.go:825: ✅ Results capped to 100000 items
+FAIL
+FAIL	giddyup/api/tests	18.503s
+FAIL

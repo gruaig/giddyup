@@ -1,0 +1,192 @@
+=== RUN   TestCompleteHorseJourney
+    e2e_test.go:42: === Testing Complete Horse Journey ===
+    e2e_test.go:45: Step 1: Searching for 'Frankel'...
+    e2e_test.go:61: ✅ Found horse: Frankel (GB) (ID: 134020, Score: 0.73)
+    e2e_test.go:69: Step 2: Getting profile for Frankel (GB) (ID: 134020)...
+    e2e_test.go:81: ✅ Career Summary:
+    e2e_test.go:82:    - Total Runs: 14
+    e2e_test.go:83:    - Wins: 14
+    e2e_test.go:84:    - Places: 14
+    e2e_test.go:86:    - Peak RPR: 143
+    e2e_test.go:94: ✅ Recent Form (Last 3 Runs):
+    e2e_test.go:99:    Run 1: 2012-10-20T00:00:00Z at Ascot
+    e2e_test.go:100:       - Position: 0xc000036200
+    e2e_test.go:102:       - BSP Odds: 1.29
+    e2e_test.go:105:       - SP Odds: 1.18
+    e2e_test.go:107:       - RPR: 0xc000014b88, OR: 0xc000014b80
+    e2e_test.go:99:    Run 2: 2012-08-22T00:00:00Z at York
+    e2e_test.go:100:       - Position: 0xc000036240
+    e2e_test.go:102:       - BSP Odds: 1.16
+    e2e_test.go:105:       - SP Odds: 1.10
+    e2e_test.go:107:       - RPR: 0xc000014c00, OR: 0xc000014bf8
+    e2e_test.go:99:    Run 3: 2012-08-01T00:00:00Z at Goodwood
+    e2e_test.go:100:       - Position: 0xc000036280
+    e2e_test.go:102:       - BSP Odds: 1.08
+    e2e_test.go:105:       - SP Odds: 1.05
+    e2e_test.go:107:       - RPR: 0xc000014c70, OR: 0xc000014c68
+    e2e_test.go:115: ✅ Going Splits:
+    e2e_test.go:117:    - Good: 6 runs, 6 wins (100.0% SR)
+    e2e_test.go:117:    - Good To Firm: 3 runs, 3 wins (100.0% SR)
+    e2e_test.go:117:    - Good To Soft: 3 runs, 3 wins (100.0% SR)
+    e2e_test.go:117:    - Soft: 2 runs, 2 wins (100.0% SR)
+    e2e_test.go:121: ✅ Distance Splits:
+    e2e_test.go:123:    - 7-8f: 12 runs, 12 wins (100.0% SR)
+    e2e_test.go:123:    - 9-12f: 2 runs, 2 wins (100.0% SR)
+    e2e_test.go:128: ✅ Course Splits (Top 3):
+    e2e_test.go:133:    - Ascot: 5 runs, 5 wins (100.0% SR)
+    e2e_test.go:133:    - Newbury: 2 runs, 2 wins (100.0% SR)
+    e2e_test.go:133:    - Goodwood: 2 runs, 2 wins (100.0% SR)
+    e2e_test.go:137: ✅ Complete Horse Journey test PASSED
+--- PASS: TestCompleteHorseJourney (1.08s)
+=== RUN   TestSearchCombinations
+    e2e_test.go:142: === Testing Search Combinations ===
+=== RUN   TestSearchCombinations/Frankel
+    e2e_test.go:189: ✅ Search for 'Frankel' returned 5 horse results
+=== RUN   TestSearchCombinations/Enable
+    e2e_test.go:189: ✅ Search for 'Enable' returned 5 horse results
+=== RUN   TestSearchCombinations/Ascot
+    e2e_test.go:189: ✅ Search for 'Ascot' returned 1 course results
+=== RUN   TestSearchCombinations/Dettori
+    e2e_test.go:189: ✅ Search for 'Dettori' returned 1 jockey results
+=== RUN   TestSearchCombinations/Gosden
+    e2e_test.go:189: ✅ Search for 'Gosden' returned 2 trainer results
+=== RUN   TestSearchCombinations/Coolmore
+    e2e_test.go:189: ✅ Search for 'Coolmore' returned 1 owner results
+--- PASS: TestSearchCombinations (0.09s)
+    --- PASS: TestSearchCombinations/Frankel (0.01s)
+    --- PASS: TestSearchCombinations/Enable (0.01s)
+    --- PASS: TestSearchCombinations/Ascot (0.02s)
+    --- PASS: TestSearchCombinations/Dettori (0.01s)
+    --- PASS: TestSearchCombinations/Gosden (0.01s)
+    --- PASS: TestSearchCombinations/Coolmore (0.03s)
+=== RUN   TestRaceSearchWithFilters
+    e2e_test.go:196: === Testing Race Search with Filters ===
+=== RUN   TestRaceSearchWithFilters/Recent_races_by_date
+    e2e_test.go:242: ✅ Recent races by date: Found 10 races
+    e2e_test.go:243:    Example: Racing TV Club Day At Fairyhouse Hurdle at Fairyhouse on 2024-01-13T00:00:00Z
+=== RUN   TestRaceSearchWithFilters/GB_Flat_races
+    e2e_test.go:242: ✅ GB Flat races: Found 10 races
+    e2e_test.go:243:    Example: At The Races App Market Movers Handicap Chase at Southwell (AW) on 2024-01-17T00:00:00Z
+=== RUN   TestRaceSearchWithFilters/Class_1_races
+    e2e_test.go:238: Expected at least 1 races, got 0
+=== RUN   TestRaceSearchWithFilters/Distance_filtered_(7-8f)
+    e2e_test.go:242: ✅ Distance filtered (7-8f): Found 10 races
+    e2e_test.go:243:    Example: Stay Golden With BetMGM Safer Gambling Handicap at Newcastle (AW) on 2024-01-17T00:00:00Z
+--- FAIL: TestRaceSearchWithFilters (0.01s)
+    --- PASS: TestRaceSearchWithFilters/Recent_races_by_date (0.00s)
+    --- PASS: TestRaceSearchWithFilters/GB_Flat_races (0.00s)
+    --- FAIL: TestRaceSearchWithFilters/Class_1_races (0.00s)
+    --- PASS: TestRaceSearchWithFilters/Distance_filtered_(7-8f) (0.00s)
+=== RUN   TestRaceDetailsWithRunners
+    e2e_test.go:251: === Testing Race Details with Runners ===
+    e2e_test.go:269: Testing race: Racing TV Club Day At Fairyhouse Hurdle (ID: 186975)
+    e2e_test.go:282: ✅ Race: Racing TV Club Day At Fairyhouse Hurdle
+    e2e_test.go:283:    - Course: Fairyhouse
+    e2e_test.go:284:    - Date: 2024-01-13T00:00:00Z
+    e2e_test.go:285:    - Distance: 16.0f
+    e2e_test.go:286:    - Going: Soft
+    e2e_test.go:287:    - Runners: 7
+    e2e_test.go:291: ✅ Top 3 Runners:
+    e2e_test.go:296:    1. Miss Manzor (GB)
+    e2e_test.go:298:       - Position: 1
+    e2e_test.go:301:       - BSP: 2.56
+    e2e_test.go:304:       - SP: 2.50
+    e2e_test.go:306:       - Trainer: W P Mullins
+    e2e_test.go:307:       - Jockey: Paul Townend
+    e2e_test.go:296:    2. Karia Des Blaises (FR)
+    e2e_test.go:298:       - Position: 2
+    e2e_test.go:301:       - BSP: 5.15
+    e2e_test.go:304:       - SP: 4.50
+    e2e_test.go:306:       - Trainer: W P Mullins
+    e2e_test.go:307:       - Jockey: Danny Mullins
+    e2e_test.go:296:    3. Ndaawi (GB)
+    e2e_test.go:298:       - Position: 3
+    e2e_test.go:301:       - BSP: 5.10
+    e2e_test.go:304:       - SP: 4.33
+    e2e_test.go:306:       - Trainer: Gordon Elliott
+    e2e_test.go:307:       - Jockey: Jack Kennedy
+--- PASS: TestRaceDetailsWithRunners (0.21s)
+=== RUN   TestTrainerProfile
+    e2e_test.go:314: === Testing Trainer Profile ===
+    e2e_test.go:332: Found trainer: John Gosden (ID: 2069)
+    e2e_test.go:345: ✅ Trainer: John Gosden
+    e2e_test.go:348: ✅ Rolling Form:
+    e2e_test.go:354:    - 14d: 0 runs, 0 wins (0.0% SR)
+    e2e_test.go:354:    - 30d: 0 runs, 0 wins (0.0% SR)
+    e2e_test.go:354:    - 90d: 0 runs, 0 wins (0.0% SR)
+    e2e_test.go:359: ✅ Top Course Splits:
+    e2e_test.go:364:    - Catterick: 11 runs, 6 wins (54.5% SR)
+    e2e_test.go:364:    - Wetherby: 10 runs, 5 wins (50.0% SR)
+    e2e_test.go:364:    - Curragh: 17 runs, 8 wins (47.1% SR)
+--- PASS: TestTrainerProfile (0.54s)
+=== RUN   TestMarketMovers
+    e2e_test.go:371: === Testing Market Movers ===
+    e2e_test.go:375: Failed to get market movers: 500
+--- FAIL: TestMarketMovers (0.00s)
+=== RUN   TestMarketCalibration
+    e2e_test.go:409: === Testing Market Calibration ===
+    e2e_test.go:413: Failed to get calibration: 500
+--- FAIL: TestMarketCalibration (0.00s)
+=== RUN   TestDrawBias
+    e2e_test.go:435: === Testing Draw Bias Analysis ===
+    e2e_test.go:448: ✅ Draw Bias Analysis (Ascot 5-7f):
+    e2e_test.go:449:    Draw | Runs | Win Rate | Top3 Rate | Avg Position
+    e2e_test.go:455:       1 |  617 |    8.75% |    20.26% | 10.26
+    e2e_test.go:455:       2 |  622 |    7.72% |    20.74% | 9.54
+    e2e_test.go:455:       3 |  608 |    6.58% |    20.72% | 9.71
+    e2e_test.go:455:       4 |  613 |    6.36% |    20.72% | 9.86
+    e2e_test.go:455:       5 |  613 |    4.89% |    17.78% | 10.06
+    e2e_test.go:455:       6 |  614 |    6.51% |    19.54% | 9.40
+    e2e_test.go:455:       7 |  627 |    7.34% |    20.89% | 9.46
+    e2e_test.go:455:       8 |  627 |    6.22% |    20.73% | 9.91
+    e2e_test.go:455:       9 |  619 |    7.11% |    21.00% | 9.77
+    e2e_test.go:455:      10 |  611 |    7.36% |    18.99% | 9.69
+    e2e_test.go:455:      11 |  584 |    5.65% |    21.92% | 10.04
+    e2e_test.go:455:      12 |  531 |    6.59% |    17.51% | 10.16
+    e2e_test.go:455:      13 |  455 |    4.84% |    16.92% | 9.78
+    e2e_test.go:455:      14 |  418 |    7.18% |    19.62% | 10.06
+    e2e_test.go:455:      15 |  360 |    4.72% |    16.67% | 11.07
+    e2e_test.go:455:      16 |  332 |    4.52% |    16.27% | 10.94
+    e2e_test.go:455:      17 |  298 |    4.03% |    16.44% | 10.93
+    e2e_test.go:455:      18 |  264 |    5.30% |    16.29% | 10.92
+    e2e_test.go:455:      19 |  195 |    4.10% |     9.74% | 11.53
+    e2e_test.go:455:      20 |  179 |    3.91% |    16.20% | 11.60
+    e2e_test.go:455:      21 |  139 |    4.32% |    14.39% | 12.30
+    e2e_test.go:455:      22 |  125 |    6.40% |    17.60% | 11.82
+    e2e_test.go:455:      23 |  111 |    4.50% |    18.02% | 12.41
+    e2e_test.go:455:      24 |   95 |    7.37% |    16.84% | 11.72
+    e2e_test.go:455:      25 |   86 |    5.81% |    10.47% | 12.05
+    e2e_test.go:455:      26 |   80 |    3.75% |    12.50% | 13.13
+    e2e_test.go:455:      27 |   71 |    5.63% |    14.08% | 11.74
+    e2e_test.go:455:      28 |   59 |    6.78% |    18.64% | 12.74
+    e2e_test.go:455:      29 |   52 |   11.54% |    17.31% | 12.30
+    e2e_test.go:455:      30 |   23 |    4.35% |    13.04% | 13.66
+    e2e_test.go:455:      31 |   27 |    7.41% |    14.81% | 13.88
+    e2e_test.go:455:      32 |   10 |   10.00% |    30.00% | 9.42
+--- PASS: TestDrawBias (3.60s)
+=== RUN   TestCommentSearch
+    e2e_test.go:462: === Testing Comment Search ===
+=== RUN   TestCommentSearch/led
+    e2e_test.go:478: ✅ Found 3 results for 'led'
+    e2e_test.go:483:    - Craven Bay (IRE) on 2024-10-14T00:00:00Z: "Jumped slightly left throughout - soon led narrowly or disputed lead - led after 2nd - not fluent then headed and prominent 5th - led narrowly 3 out - headed approaching last - soon rallied - ridden run-in - led again inside final 110yds - kept on and all out(op 9/4)"
+    e2e_test.go:483:    - Cruz Control (FR) on 2024-03-16T00:00:00Z: "Led narrowly - headed and pressed leader 2nd - briefly led after 9th - led narrowly or disputed lead from 13th - clear with one other 3 out - led clearly before last - ridden out(op Evens tchd 5/4)"
+=== RUN   TestCommentSearch/prominent
+    e2e_test.go:478: ✅ Found 3 results for 'prominent'
+    e2e_test.go:483:    - Fear The Deere (IRE) on 2025-10-02T00:00:00Z: "Prominent - prominent behind clear leader 4th - not fluent 6th - prominent 5 out - weakened quickly after 3 out - pulled up before 2 out(op 18/1)"
+    e2e_test.go:483:    - Itsalonglongroad (GB) on 2025-09-12T00:00:00Z: "Prominent - prominent behind clear leaders after 1st - prominent 6th - led before 5 out - headed just after 5 out - slow jump 4 out - weakened after 3 out(op 15/2)"
+=== RUN   TestCommentSearch/never_dangerous
+    e2e_test.go:470: Comment search failed: 400
+--- FAIL: TestCommentSearch (8.42s)
+    --- PASS: TestCommentSearch/led (4.85s)
+    --- PASS: TestCommentSearch/prominent (3.57s)
+    --- FAIL: TestCommentSearch/never_dangerous (0.00s)
+=== RUN   TestCoursesAndMeetings
+    e2e_test.go:491: === Testing Courses and Meetings ===
+    e2e_test.go:504: ✅ Found 89 courses
+    e2e_test.go:512: Getting meetings for Aintree (ID: 82)
+    e2e_test.go:524: ✅ Found 7 meetings at Aintree
+    e2e_test.go:526:    Latest meeting: 2024-12-26T00:00:00Z (7 races)
+--- PASS: TestCoursesAndMeetings (0.00s)
+FAIL
+FAIL	giddyup/api/tests	13.960s
+FAIL
