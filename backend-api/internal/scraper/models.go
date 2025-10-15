@@ -32,6 +32,7 @@ type Race struct {
 
 // Runner represents a single runner in a race
 type Runner struct {
+	RunnerID  int // Database runner_id (populated after insert)
 	Num       int
 	Pos       string
 	Draw      int

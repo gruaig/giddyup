@@ -1,0 +1,1 @@
+{"timestamp": "2025-10-08T19:46:49.308763", "level": "\u001b[33mWARNING\u001b[0m", "message": "nvidia-ml-py not available. GPU monitoring disabled.", "module": "logger", "function": "_log", "line": 276, "exc_text": null, "taskName": null, "asctime": "2025-10-08 19:46:49,308"}

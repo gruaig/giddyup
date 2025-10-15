@@ -6,10 +6,12 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"giddyup/api/internal/betfair"
 	"giddyup/api/internal/scraper"
 
 	"github.com/jmoiron/sqlx"
@@ -93,7 +95,157 @@ func (s *AutoUpdateService) RunInBackground() {
 		}
 
 		log.Printf("[AutoUpdate] 🎉 Backfill complete! Success: %d, Failed: %d", successCount, failureCount)
+
+		// After backfilling yesterday, handle today's races
+		s.handleTodaysRaces()
 	}()
+}
+
+// handleTodaysRaces fetches today's racecards and optionally starts live price updates
+func (s *AutoUpdateService) handleTodaysRaces() {
+	// Only run during racing hours (6am - 11pm)
+	currentHour := time.Now().Hour()
+	if currentHour < 6 || currentHour >= 23 {
+		log.Println("[AutoUpdate] Outside racing hours - skipping today's races")
+		return
+	}
+
+	today := time.Now().Format("2006-01-02")
+	log.Printf("[AutoUpdate] 📅 Fetching today's racecards (%s)...", today)
+
+	// Fetch racecards
+	races, runners, err := s.backfillRacecards(today)
+	if err != nil {
+		log.Printf("[AutoUpdate] ❌ Failed to fetch racecards: %v", err)
+		return
+	}
+
+	log.Printf("[AutoUpdate] ✅ Today's racecards: %d races, %d runners (prelim=true)", races, runners)
+
+	// Start live prices if enabled
+	enableLivePrices := os.Getenv("ENABLE_LIVE_PRICES") == "true"
+	if !enableLivePrices {
+		log.Println("[AutoUpdate] Live prices disabled")
+		return
+	}
+
+	log.Println("[AutoUpdate] 🔴 Starting live prices service...")
+	if err := s.startLivePrices(today); err != nil {
+		log.Printf("[AutoUpdate] ❌ Failed to start live prices: %v", err)
+		return
+	}
+
+	log.Println("[AutoUpdate] ✅ Live prices service running")
+}
+
+// backfillRacecards fetches and inserts today's racecards (preliminary data)
+func (s *AutoUpdateService) backfillRacecards(dateStr string) (int, int, error) {
+	// Step 1: Scrape racecards
+	log.Printf("[AutoUpdate]   [1/3] Scraping racecards for %s...", dateStr)
+	rcScraper := scraper.NewRacecardScraper()
+	rpRaces, err := rcScraper.GetTodaysRaces(dateStr)
+	if err != nil {
+		return 0, 0, fmt.Errorf("scrape racecards failed: %w", err)
+	}
+	log.Printf("[AutoUpdate]   ✓ Got %d races from racecards", len(rpRaces))
+
+	// Step 2: Insert to database (without Betfair prices initially)
+	log.Printf("[AutoUpdate]   [2/3] Inserting to database (prelim=true)...")
+	races, runners, err := s.insertToDatabase(dateStr, rpRaces, true) // true = prelim
+	if err != nil {
+		return 0, 0, fmt.Errorf("insert failed: %w", err)
+	}
+	log.Printf("[AutoUpdate]   ✓ Inserted %d races, %d runners (preliminary)", races, runners)
+
+	return races, runners, nil
+}
+
+// startLivePrices discovers Betfair markets and starts the live price updater
+func (s *AutoUpdateService) startLivePrices(dateStr string) error {
+	// Get Betfair credentials
+	appKey := os.Getenv("BETFAIR_APP_KEY")
+	sessionToken := os.Getenv("BETFAIR_SESSION_TOKEN")
+	username := os.Getenv("BETFAIR_USERNAME")
+	password := os.Getenv("BETFAIR_PASSWORD")
+
+	if appKey == "" {
+		return fmt.Errorf("BETFAIR_APP_KEY not set")
+	}
+
+	// Authenticate if needed
+	if sessionToken == "" {
+		if username == "" || password == "" {
+			return fmt.Errorf("BETFAIR_SESSION_TOKEN or credentials not set")
+		}
+
+		log.Println("[AutoUpdate] Authenticating with Betfair...")
+		auth := betfair.NewAuthenticator(appKey, username, password)
+		var err error
+		sessionToken, err = auth.Login()
+		if err != nil {
+			return fmt.Errorf("betfair login failed: %w", err)
+		}
+		log.Println("[AutoUpdate] ✅ Authenticated with Betfair")
+	}
+
+	// Create Betfair client
+	bfClient := betfair.NewClient(appKey, sessionToken)
+
+	// Discover markets
+	log.Println("[AutoUpdate] Discovering Betfair markets...")
+	matcher := betfair.NewMatcher(bfClient)
+	
+	ctx := context.Background()
+	markets, err := matcher.FindTodaysMarkets(ctx, dateStr)
+	if err != nil {
+		return fmt.Errorf("find markets failed: %w", err)
+	}
+
+	if len(markets) == 0 {
+		log.Println("[AutoUpdate] No Betfair markets found for today")
+		return nil
+	}
+
+	log.Printf("[AutoUpdate] Found %d Betfair markets", len(markets))
+
+	// Load races from database to get race IDs and runner IDs
+	rpRaces, raceIDMap, err := s.loadRacesFromDB(dateStr)
+	if err != nil {
+		return fmt.Errorf("load races from DB failed: %w", err)
+	}
+
+	// Match races to markets
+	log.Println("[AutoUpdate] Matching Racing Post ↔ Betfair...")
+	mappings := matcher.MatchRacesToMarkets(rpRaces, markets, raceIDMap)
+
+	if len(mappings) == 0 {
+		log.Println("[AutoUpdate] Warning: No races matched with Betfair markets")
+		return nil
+	}
+
+	log.Printf("[AutoUpdate] Matched %d races with Betfair markets", len(mappings))
+
+	// Get update interval
+	intervalSecs := 60 // default
+	if envInterval := os.Getenv("LIVE_PRICE_INTERVAL"); envInterval != "" {
+		if parsed, err := strconv.Atoi(envInterval); err == nil && parsed > 0 {
+			intervalSecs = parsed
+		}
+	}
+
+	// Start live prices service
+	livePrices := NewLivePricesService(s.db, bfClient, time.Duration(intervalSecs)*time.Second)
+	livePrices.SetMarketMappings(mappings)
+
+	// Run in background goroutine
+	go func() {
+		ctx := context.Background()
+		if err := livePrices.Run(ctx); err != nil && err != context.Canceled {
+			log.Printf("[AutoUpdate] Live prices service error: %v", err)
+		}
+	}()
+
+	return nil
 }
 
 // getLastDateInDatabase finds the most recent race date
@@ -141,7 +293,7 @@ func (s *AutoUpdateService) backfillDate(dateStr string) (int, int, error) {
 
 	// Step 4: Insert to database
 	log.Printf("[AutoUpdate]   [4/4] Inserting to database...")
-	races, runners, err := s.insertToDatabase(dateStr, mergedRaces)
+	races, runners, err := s.insertToDatabase(dateStr, mergedRaces, false) // false = not prelim
 	if err != nil {
 		return 0, 0, fmt.Errorf("database insert failed: %w", err)
 	}
@@ -213,7 +365,7 @@ func (s *AutoUpdateService) matchAndMerge(rpRaces []scraper.Race, bfRaces []scra
 }
 
 // insertToDatabase inserts races and runners into the database
-func (s *AutoUpdateService) insertToDatabase(dateStr string, races []scraper.Race) (int, int, error) {
+func (s *AutoUpdateService) insertToDatabase(dateStr string, races []scraper.Race, prelim bool) (int, int, error) {
 	ctx := context.Background()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -239,26 +391,27 @@ func (s *AutoUpdateService) insertToDatabase(dateStr string, races []scraper.Rac
 		// Generate race_key
 		raceKey := generateRaceKey(race)
 
-		// Insert race
+		// Insert race with prelim flag
 		var raceID int64
 		err := tx.QueryRowContext(ctx, `
 			INSERT INTO racing.races (
 				race_key, race_date, region, course_id, off_time,
 				race_name, race_type, class, dist_raw, dist_f, dist_m,
-				going, surface, ran
+				going, surface, ran, prelim
 			) VALUES (
 				$1, $2, $3, $4, $5,
 				$6, $7, $8, $9, $10, $11,
-				$12, $13, $14
+				$12, $13, $14, $15
 			)
 			ON CONFLICT (race_key, race_date) DO UPDATE SET
 				race_name = EXCLUDED.race_name,
-				ran = EXCLUDED.ran
+				ran = EXCLUDED.ran,
+				prelim = EXCLUDED.prelim
 			RETURNING race_id
 		`, raceKey, race.Date, race.Region, nullInt64(race.CourseID), nullString(race.OffTime),
 			race.RaceName, race.Type, nullString(race.Class), nullString(race.Distance),
 			nullFloat64(race.DistanceF), nullInt(race.DistanceM),
-			nullString(race.Going), nullString(race.Surface), race.Ran).Scan(&raceID)
+			nullString(race.Going), nullString(race.Surface), race.Ran, prelim).Scan(&raceID)
 
 		if err != nil {
 			return 0, 0, fmt.Errorf("failed to insert race %s: %w", raceKey, err)
@@ -266,11 +419,12 @@ func (s *AutoUpdateService) insertToDatabase(dateStr string, races []scraper.Rac
 
 		raceCount++
 
-		// Insert runners
-		for _, runner := range race.Runners {
+		// Insert runners and capture runner_ids
+		for j, runner := range race.Runners {
 			runnerKey := generateRunnerKey(raceKey, runner)
 
-			_, err := tx.ExecContext(ctx, `
+			var runnerID int64
+			err := tx.QueryRowContext(ctx, `
 				INSERT INTO racing.runners (
 					runner_key, race_id, race_date,
 					horse_id, trainer_id, jockey_id, owner_id,
@@ -283,11 +437,12 @@ func (s *AutoUpdateService) insertToDatabase(dateStr string, races []scraper.Rac
 					$16, $17, $18, $19
 				)
 				ON CONFLICT (runner_key, race_date) DO UPDATE SET
-					pos_raw = EXCLUDED.pos_raw,
+					pos_raw = COALESCE(EXCLUDED.pos_raw, racing.runners.pos_raw),
 					win_bsp = COALESCE(EXCLUDED.win_bsp, racing.runners.win_bsp),
 					win_ppwap = COALESCE(EXCLUDED.win_ppwap, racing.runners.win_ppwap),
 					place_bsp = COALESCE(EXCLUDED.place_bsp, racing.runners.place_bsp),
 					place_ppwap = COALESCE(EXCLUDED.place_ppwap, racing.runners.place_ppwap)
+				RETURNING runner_id
 			`,
 				runnerKey, raceID, race.Date,
 				nullInt64(runner.HorseID), nullInt64(runner.TrainerID), nullInt64(runner.JockeyID), nullInt64(runner.OwnerID),
@@ -295,12 +450,14 @@ func (s *AutoUpdateService) insertToDatabase(dateStr string, races []scraper.Rac
 				nullInt(runner.Lbs), nullInt(runner.OR), nullInt(runner.RPR), nullString(runner.Comment),
 				nullFloat64BSP(runner.WinBSP), nullFloat64(runner.WinPPWAP),
 				nullFloat64BSP(runner.PlaceBSP), nullFloat64(runner.PlacePPWAP),
-			)
+			).Scan(&runnerID)
 
 			if err != nil {
 				return 0, 0, fmt.Errorf("failed to insert runner %s: %w", runnerKey, err)
 			}
 
+			// Store runner_id back in the race data for Betfair matching
+			race.Runners[j].RunnerID = int(runnerID)
 			runnerCount++
 		}
 	}
@@ -354,6 +511,107 @@ func parseFloat(s string) float64 {
 		return 0.0
 	}
 	return val
+}
+
+// loadRacesFromDB loads races from database with runner IDs populated
+func (s *AutoUpdateService) loadRacesFromDB(dateStr string) ([]scraper.Race, map[string]int64, error) {
+	rows, err := s.db.Query(`
+		SELECT 
+			r.race_id, r.race_date, r.region, c.course_name, r.off_time,
+			r.race_name, r.race_type, r.class, r.dist_raw, r.going, r.surface, r.ran,
+			run.runner_id, run.num, run.draw, h.horse_id, h.horse_name,
+			j.jockey_id, j.jockey_name, t.trainer_id, t.trainer_name,
+			run.age, run.lbs, run.or, run.rpr
+		FROM racing.races r
+		JOIN racing.courses c ON r.course_id = c.course_id
+		LEFT JOIN racing.runners run ON run.race_id = r.race_id
+		LEFT JOIN racing.horses h ON h.horse_id = run.horse_id
+		LEFT JOIN racing.jockeys j ON j.jockey_id = run.jockey_id
+		LEFT JOIN racing.trainers t ON t.trainer_id = run.trainer_id
+		WHERE r.race_date = $1
+		ORDER BY r.race_id, run.num
+	`, dateStr)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	racesMap := make(map[int64]*scraper.Race)
+	raceIDMap := make(map[string]int64)
+
+	for rows.Next() {
+		var raceID int64
+		var raceDate, region, course, raceName, raceType string
+		var offTime, class, distance, going, surface sql.NullString
+		var ran int
+		var runnerID, horseID, jockeyID, trainerID sql.NullInt64
+		var num, draw, age, lbs, or, rpr sql.NullInt32
+		var horse, jockey, trainer sql.NullString
+
+		err := rows.Scan(
+			&raceID, &raceDate, &region, &course, &offTime,
+			&raceName, &raceType, &class, &distance, &going, &surface, &ran,
+			&runnerID, &num, &draw, &horseID, &horse,
+			&jockeyID, &jockey, &trainerID, &trainer,
+			&age, &lbs, &or, &rpr,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Get or create race
+		race, exists := racesMap[raceID]
+		if !exists {
+			race = &scraper.Race{
+				RaceID:   int(raceID),
+				Date:     raceDate,
+				Region:   region,
+				Course:   course,
+				OffTime:  offTime.String,
+				RaceName: raceName,
+				Type:     raceType,
+				Class:    class.String,
+				Distance: distance.String,
+				Going:    going.String,
+				Surface:  surface.String,
+				Ran:      ran,
+				Runners:  []scraper.Runner{},
+			}
+			racesMap[raceID] = race
+
+			// Generate race key for mapping
+			raceKey := generateRaceKey(*race)
+			raceIDMap[raceKey] = raceID
+		}
+
+		// Add runner if exists
+		if runnerID.Valid && horse.Valid {
+			runner := scraper.Runner{
+				RunnerID:  int(runnerID.Int64),
+				Num:       int(num.Int32),
+				Draw:      int(draw.Int32),
+				HorseID:   int(horseID.Int64),
+				Horse:     horse.String,
+				JockeyID:  int(jockeyID.Int64),
+				Jockey:    jockey.String,
+				TrainerID: int(trainerID.Int64),
+				Trainer:   trainer.String,
+				Age:       int(age.Int32),
+				Lbs:       int(lbs.Int32),
+				OR:        int(or.Int32),
+				RPR:       int(rpr.Int32),
+			}
+			race.Runners = append(race.Runners, runner)
+		}
+	}
+
+	// Convert map to slice
+	var races []scraper.Race
+	for _, race := range racesMap {
+		races = append(races, *race)
+	}
+
+	return races, raceIDMap, nil
 }
 
 func nullString(s string) interface{} {
