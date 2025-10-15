@@ -56,36 +56,47 @@ func (s *RacecardScraper) GetTodaysRaces(date string) ([]Race, error) {
 		return nil, err
 	}
 
-	// Find all meetings (accordion sections)
+	// Find ALL racecard links on the page (catch-all approach)
 	var raceURLs []string
-	var ukIreRaces int
-
-	doc.Find("section[data-accordion-row]").Each(func(i int, meeting *goquery.Selection) {
-		// Find all race links in this meeting
-		meeting.Find("a.RC-meetingItem__link").Each(func(j int, raceLink *goquery.Selection) {
-			href, exists := raceLink.Attr("href")
-			if !exists {
-				return
-			}
-
-			// href is like /racecards/32/newcastle/2025-10-15/123456
-			parts := strings.Split(href, "/")
-			if len(parts) >= 3 {
-				courseIDStr := parts[2]
-				courseID, err := strconv.Atoi(courseIDStr)
-				if err == nil {
-					region := getRegionFromCourseIDStatic(courseID)
-					if region != "" { // Only UK or IRE
-						fullURL := "https://www.racingpost.com" + href
-						raceURLs = append(raceURLs, fullURL)
-						ukIreRaces++
-					}
-				}
-			}
-		})
+	seen := make(map[string]bool)
+	
+	doc.Find("a[href*='/racecards/']").Each(func(i int, sel *goquery.Selection) {
+		href, exists := sel.Attr("href")
+		if !exists {
+			return
+		}
+		
+		// Must match pattern: /racecards/COURSE_ID/course-name/YYYY-MM-DD/RACE_ID
+		parts := strings.Split(href, "/")
+		if len(parts) < 6 {
+			return
+		}
+		
+		if parts[1] != "racecards" {
+			return
+		}
+		
+		// Extract and validate course ID
+		courseID, err := strconv.Atoi(parts[2])
+		if err != nil {
+			return
+		}
+		
+		// Filter UK/IRE only
+		region := getRegionFromCourseIDStatic(courseID)
+		if region == "" {
+			return
+		}
+		
+		// Deduplicate
+		fullURL := "https://www.racingpost.com" + href
+		if !seen[fullURL] {
+			raceURLs = append(raceURLs, fullURL)
+			seen[fullURL] = true
+		}
 	})
 
-	log.Printf("[RacecardScraper] Found %d UK/IRE race cards for %s", ukIreRaces, date)
+	log.Printf("[RacecardScraper] Found %d UK/IRE race cards for %s", len(raceURLs), date)
 	
 	// Scrape each racecard
 	var races []Race
@@ -159,12 +170,40 @@ func (s *RacecardScraper) scrapeRacecard(url string, date string) (Race, error) 
 		race.Course = strings.Title(race.Course)
 	}
 	
-	// Extract off time from data attribute
-	doc.Find("[data-card-race-time]").Each(func(i int, s *goquery.Selection) {
-		if attr, exists := s.Attr("data-card-race-time"); exists && race.OffTime == "" {
-			race.OffTime = strings.TrimSpace(attr)
+	// Extract off time from ISO timestamp (more reliable)
+	doc.Find("[data-card-race-date-time]").Each(func(i int, s *goquery.Selection) {
+		if attr, exists := s.Attr("data-card-race-date-time"); exists && race.OffTime == "" {
+			// Parse "2025-10-15T13:35:00+01:00" and extract time
+			if t, err := time.Parse(time.RFC3339, attr); err == nil {
+				race.OffTime = t.Format("15:04") // "13:35" in 24-hour format
+			}
 		}
 	})
+	
+	// Fallback: try data-card-race-time
+	if race.OffTime == "" {
+		doc.Find("[data-card-race-time]").Each(func(i int, s *goquery.Selection) {
+			if attr, exists := s.Attr("data-card-race-time"); exists {
+				// Convert 12-hour to 24-hour if needed
+				timeStr := strings.TrimSpace(attr)
+				if len(timeStr) <= 5 && !strings.Contains(timeStr, ":") {
+					// Handle formats like "1:35" 
+					parts := strings.Split(timeStr, ":")
+					if len(parts) == 2 {
+						hour, _ := strconv.Atoi(parts[0])
+						if hour < 12 && hour > 0 {
+							// Afternoon racing - add 12 for PM
+							race.OffTime = fmt.Sprintf("%02d:%s", hour+12, parts[1])
+						} else {
+							race.OffTime = fmt.Sprintf("%02d:%s", hour, parts[1])
+						}
+					}
+				} else {
+					race.OffTime = timeStr
+				}
+			}
+		})
+	}
 	
 	// Extract race name from meta description
 	if metaDesc, exists := doc.Find("meta[name='description']").Attr("content"); exists {
