@@ -178,3 +178,4 @@ func generateRaceKeyHelper(race scraper.Race) string {
 	return fmt.Sprintf("%s|%s|%s|%s|%s|%s", race.Date, normRegion, normCourse, normTime, normName, normType)
 }
 
+

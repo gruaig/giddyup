@@ -110,17 +110,25 @@ func (s *AutoUpdateService) handleTodaysRaces() {
 		return
 	}
 
+	// Fetch TODAY's races
 	today := time.Now().Format("2006-01-02")
-	log.Printf("[AutoUpdate] 📅 Fetching today's racecards (%s)...", today)
-
-	// Fetch racecards
+	log.Printf("[AutoUpdate] 📅 Fetching TODAY's racecards (%s)...", today)
 	races, runners, err := s.backfillRacecards(today)
 	if err != nil {
-		log.Printf("[AutoUpdate] ❌ Failed to fetch racecards: %v", err)
-		return
+		log.Printf("[AutoUpdate] ❌ Failed to fetch today's racecards: %v", err)
+	} else {
+		log.Printf("[AutoUpdate] ✅ TODAY loaded: %d races, %d runners", races, runners)
 	}
 
-	log.Printf("[AutoUpdate] ✅ Today's racecards: %d races, %d runners (prelim=true)", races, runners)
+	// Fetch TOMORROW's races (for preview + early Betfair markets)
+	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	log.Printf("[AutoUpdate] 📅 Fetching TOMORROW's racecards (%s)...", tomorrow)
+	tomorrowRaces, tomorrowRunners, err := s.backfillRacecards(tomorrow)
+	if err != nil {
+		log.Printf("[AutoUpdate] ⚠️  Failed to fetch tomorrow's racecards: %v", err)
+	} else {
+		log.Printf("[AutoUpdate] ✅ TOMORROW loaded: %d races, %d runners", tomorrowRaces, tomorrowRunners)
+	}
 
 	// Start live prices if enabled
 	enableLivePrices := os.Getenv("ENABLE_LIVE_PRICES") == "true"
@@ -129,28 +137,67 @@ func (s *AutoUpdateService) handleTodaysRaces() {
 		return
 	}
 
-	log.Println("[AutoUpdate] 🔴 Starting live prices service...")
-	if err := s.startLivePrices(today); err != nil {
-		log.Printf("[AutoUpdate] ❌ Failed to start live prices: %v", err)
-		return
+	if races > 0 {
+		log.Println("[AutoUpdate] 🔴 Starting live prices for TODAY...")
+		if err := s.startLivePrices(today); err != nil {
+			log.Printf("[AutoUpdate] ❌ Failed to start live prices for today: %v", err)
+		} else {
+			log.Println("[AutoUpdate] ✅ Live prices running for today")
+		}
 	}
 
-	log.Println("[AutoUpdate] ✅ Live prices service running")
+	if tomorrowRaces > 0 {
+		log.Println("[AutoUpdate] 🔴 Starting live prices for TOMORROW...")
+		if err := s.startLivePrices(tomorrow); err != nil {
+			log.Printf("[AutoUpdate] ⚠️  Failed to start live prices for tomorrow: %v", err)
+		} else {
+			log.Println("[AutoUpdate] ✅ Live prices running for tomorrow")
+		}
+	}
 }
 
 // backfillRacecards fetches and inserts today's racecards (preliminary data)
 func (s *AutoUpdateService) backfillRacecards(dateStr string) (int, int, error) {
-	// Step 1: Scrape racecards
-	log.Printf("[AutoUpdate]   [1/3] Scraping racecards for %s...", dateStr)
-	rcScraper := scraper.NewRacecardScraper()
-	rpRaces, err := rcScraper.GetTodaysRaces(dateStr)
-	if err != nil {
-		return 0, 0, fmt.Errorf("scrape racecards failed: %w", err)
+	// Check which data source to use
+	useSportingLife := os.Getenv("USE_SPORTING_LIFE") != "false" // Default true
+	
+	var rpRaces []scraper.Race
+	var err error
+	
+	if useSportingLife {
+		// Use Sporting Life (preferred - gets all races in 1 request)
+		log.Printf("[AutoUpdate]   [1/2] Fetching racecards from Sporting Life for %s...", dateStr)
+		slScraper := scraper.NewSportingLifeScraper()
+		rpRaces, err = slScraper.GetRacesForDate(dateStr)
+		if err != nil {
+			log.Printf("[AutoUpdate]   ⚠️  Sporting Life failed: %v", err)
+			
+			// Fallback to Racing Post if enabled
+			if os.Getenv("USE_RACING_POST") == "true" {
+				log.Printf("[AutoUpdate]   Falling back to Racing Post...")
+				rcScraper := scraper.NewRacecardScraper()
+				rpRaces, err = rcScraper.GetTodaysRaces(dateStr)
+				if err != nil {
+					return 0, 0, fmt.Errorf("both sources failed: %w", err)
+				}
+			} else {
+				return 0, 0, fmt.Errorf("Sporting Life failed and Racing Post disabled: %w", err)
+			}
+		}
+	} else {
+		// Use Racing Post
+		log.Printf("[AutoUpdate]   [1/2] Scraping racecards from Racing Post for %s...", dateStr)
+		rcScraper := scraper.NewRacecardScraper()
+		rpRaces, err = rcScraper.GetTodaysRaces(dateStr)
+		if err != nil {
+			return 0, 0, fmt.Errorf("scrape racecards failed: %w", err)
+		}
 	}
-	log.Printf("[AutoUpdate]   ✓ Got %d races from racecards", len(rpRaces))
+	
+	log.Printf("[AutoUpdate]   ✓ Got %d UK/IRE races", len(rpRaces))
 
-	// Step 2: Insert to database (without Betfair prices initially)
-	log.Printf("[AutoUpdate]   [2/3] Inserting to database (prelim=true)...")
+	// Insert to database (without Betfair prices initially)
+	log.Printf("[AutoUpdate]   [2/2] Inserting to database (prelim=true)...")
 	races, runners, err := s.insertToDatabase(dateStr, rpRaces, true) // true = prelim
 	if err != nil {
 		return 0, 0, fmt.Errorf("insert failed: %w", err)

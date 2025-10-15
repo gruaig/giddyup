@@ -101,3 +101,4 @@ type RPCError struct {
 	Message string `json:"message"`
 }
 
+
