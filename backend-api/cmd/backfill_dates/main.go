@@ -14,7 +14,7 @@ import (
 
 	"giddyup/api/internal/scraper"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 var (
@@ -169,6 +169,9 @@ func matchAndMerge(rpRaces []scraper.Race, bfRaces []scraper.StitchedRace) []scr
 		normTime := normalizeTime(bfRace.OffTime)
 		key := fmt.Sprintf("%s|%s|%s", bfRace.Date, normName, normTime)
 		bfMap[key] = bfRace
+		if *verbose {
+			log.Printf("    [BF] %s → key: %s", bfRace.EventName, key)
+		}
 	}
 
 	// Match Racing Post races with Betfair
@@ -179,12 +182,19 @@ func matchAndMerge(rpRaces []scraper.Race, bfRaces []scraper.StitchedRace) []scr
 		normTime := normalizeTime(race.OffTime)
 		key := fmt.Sprintf("%s|%s|%s", race.Date, normName, normTime)
 
+		if *verbose {
+			log.Printf("    [RP] %s @ %s → key: %s", race.RaceName, race.OffTime, key)
+		}
+
 		bfRace, found := bfMap[key]
 		if !found {
 			// Try without normalizing (direct match)
 			key2 := fmt.Sprintf("%s|%s|%s", race.Date, strings.ToLower(strings.TrimSpace(race.RaceName)), normTime)
 			bfRace, found = bfMap[key2]
 			if !found {
+				if *verbose {
+					log.Printf("    [RP] No match for: %s", key)
+				}
 				continue
 			}
 		}
@@ -252,6 +262,16 @@ func insertToDatabase(db *sql.DB, dateStr string, races []scraper.Race) (int, in
 	}
 	defer tx.Rollback()
 
+	// STEP 1: Upsert dimension tables and populate foreign keys
+	log.Println("  🔄 Upserting dimension tables...")
+	if err := upsertDimensions(tx, races); err != nil {
+		return 0, 0, fmt.Errorf("failed to upsert dimensions: %w", err)
+	}
+
+	if err := populateForeignKeys(tx, races); err != nil {
+		return 0, 0, fmt.Errorf("failed to populate foreign keys: %w", err)
+	}
+
 	raceCount := 0
 	runnerCount := 0
 
@@ -262,7 +282,7 @@ func insertToDatabase(db *sql.DB, dateStr string, races []scraper.Race) (int, in
 		// Insert race
 		var raceID int64
 		err := tx.QueryRowContext(ctx, `
-			INSERT INTO races (
+			INSERT INTO racing.races (
 				race_key, race_date, region, course_id, off_time,
 				race_name, race_type, class, dist_raw, dist_f, dist_m,
 				going, surface, ran
@@ -290,7 +310,7 @@ func insertToDatabase(db *sql.DB, dateStr string, races []scraper.Race) (int, in
 			runnerKey := generateRunnerKey(raceKey, runner)
 
 			_, err := tx.ExecContext(ctx, `
-				INSERT INTO runners (
+				INSERT INTO racing.runners (
 					runner_key, race_id, race_date,
 					horse_id, trainer_id, jockey_id, owner_id,
 					num, pos_raw, draw, age, lbs, "or", rpr, comment,
@@ -434,4 +454,280 @@ func nullFloat64BSP(f float64) interface{} {
 		return nil
 	}
 	return f
+}
+
+// upsertDimensions inserts/updates dimension tables (courses, horses, trainers, jockeys, owners)
+func upsertDimensions(tx *sql.Tx, races []scraper.Race) error {
+	// Collect all unique names
+	courses := make(map[string]string) // courseName -> region
+	horses := make(map[string]bool)
+	trainers := make(map[string]bool)
+	jockeys := make(map[string]bool)
+	owners := make(map[string]bool)
+
+	for _, race := range races {
+		if race.Course != "" {
+			courses[strings.TrimSpace(race.Course)] = race.Region
+		}
+
+		for _, runner := range race.Runners {
+			if runner.Horse != "" {
+				horses[strings.TrimSpace(runner.Horse)] = true
+			}
+			if runner.Trainer != "" {
+				trainers[strings.TrimSpace(runner.Trainer)] = true
+			}
+			if runner.Jockey != "" {
+				jockeys[strings.TrimSpace(runner.Jockey)] = true
+			}
+			if runner.Owner != "" {
+				owners[strings.TrimSpace(runner.Owner)] = true
+			}
+		}
+	}
+
+	// Upsert courses
+	for courseName, region := range courses {
+		_, err := tx.Exec(`
+			INSERT INTO racing.courses (course_name, region)
+			VALUES ($1, $2)
+			ON CONFLICT ON CONSTRAINT courses_uniq DO NOTHING
+		`, courseName, region)
+		if err != nil {
+			return fmt.Errorf("failed to upsert course %s: %w", courseName, err)
+		}
+	}
+
+	// Upsert horses
+	for horse := range horses {
+		_, err := tx.Exec(`
+			INSERT INTO racing.horses (horse_name)
+			VALUES ($1)
+			ON CONFLICT ON CONSTRAINT horses_uniq DO NOTHING
+		`, horse)
+		if err != nil {
+			return fmt.Errorf("failed to upsert horse %s: %w", horse, err)
+		}
+	}
+
+	// Upsert trainers
+	for trainer := range trainers {
+		_, err := tx.Exec(`
+			INSERT INTO racing.trainers (trainer_name)
+			VALUES ($1)
+			ON CONFLICT ON CONSTRAINT trainers_uniq DO NOTHING
+		`, trainer)
+		if err != nil {
+			return fmt.Errorf("failed to upsert trainer %s: %w", trainer, err)
+		}
+	}
+
+	// Upsert jockeys
+	for jockey := range jockeys {
+		_, err := tx.Exec(`
+			INSERT INTO racing.jockeys (jockey_name)
+			VALUES ($1)
+			ON CONFLICT ON CONSTRAINT jockeys_uniq DO NOTHING
+		`, jockey)
+		if err != nil {
+			return fmt.Errorf("failed to upsert jockey %s: %w", jockey, err)
+		}
+	}
+
+	// Upsert owners
+	for owner := range owners {
+		_, err := tx.Exec(`
+			INSERT INTO racing.owners (owner_name)
+			VALUES ($1)
+			ON CONFLICT ON CONSTRAINT owners_uniq DO NOTHING
+		`, owner)
+		if err != nil {
+			return fmt.Errorf("failed to upsert owner %s: %w", owner, err)
+		}
+	}
+
+	log.Printf("    ✓ Upserted %d courses, %d horses, %d trainers, %d jockeys, %d owners",
+		len(courses), len(horses), len(trainers), len(jockeys), len(owners))
+
+	return nil
+}
+
+// populateForeignKeys looks up IDs and populates foreign key fields in the race data
+func populateForeignKeys(tx *sql.Tx, races []scraper.Race) error {
+	// Create lookup maps
+	courseIDs := make(map[string]int64)
+	horseIDs := make(map[string]int64)
+	trainerIDs := make(map[string]int64)
+	jockeyIDs := make(map[string]int64)
+	ownerIDs := make(map[string]int64)
+
+	// Collect all unique names to look up
+	courses := make(map[string]bool)
+	horses := make(map[string]bool)
+	trainers := make(map[string]bool)
+	jockeys := make(map[string]bool)
+	owners := make(map[string]bool)
+
+	for _, race := range races {
+		if race.Course != "" {
+			courses[strings.TrimSpace(race.Course)] = true
+		}
+
+		for _, runner := range race.Runners {
+			if runner.Horse != "" {
+				horses[strings.TrimSpace(runner.Horse)] = true
+			}
+			if runner.Trainer != "" {
+				trainers[strings.TrimSpace(runner.Trainer)] = true
+			}
+			if runner.Jockey != "" {
+				jockeys[strings.TrimSpace(runner.Jockey)] = true
+			}
+			if runner.Owner != "" {
+				owners[strings.TrimSpace(runner.Owner)] = true
+			}
+		}
+	}
+
+	// ✅ OPTIMIZED: Batch lookup using ANY($1) - 4 queries instead of 900+
+
+	// Look up course IDs (batch)
+	if len(courses) > 0 {
+		courseList := make([]string, 0, len(courses))
+		for courseName := range courses {
+			courseList = append(courseList, courseName)
+		}
+		rows, err := tx.Query(`
+			SELECT course_id, course_name 
+			FROM racing.courses 
+			WHERE course_name = ANY($1)
+		`, pq.Array(courseList))
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id int64
+				var name string
+				rows.Scan(&id, &name)
+				courseIDs[strings.TrimSpace(name)] = id
+			}
+		}
+	}
+
+	// Look up horse IDs (batch)
+	if len(horses) > 0 {
+		horseList := make([]string, 0, len(horses))
+		for horse := range horses {
+			horseList = append(horseList, horse)
+		}
+		rows, err := tx.Query(`
+			SELECT horse_id, horse_name 
+			FROM racing.horses 
+			WHERE horse_name = ANY($1)
+		`, pq.Array(horseList))
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id int64
+				var name string
+				rows.Scan(&id, &name)
+				horseIDs[strings.TrimSpace(name)] = id
+			}
+		}
+	}
+
+	// Look up trainer IDs (batch)
+	if len(trainers) > 0 {
+		trainerList := make([]string, 0, len(trainers))
+		for trainer := range trainers {
+			trainerList = append(trainerList, trainer)
+		}
+		rows, err := tx.Query(`
+			SELECT trainer_id, trainer_name 
+			FROM racing.trainers 
+			WHERE trainer_name = ANY($1)
+		`, pq.Array(trainerList))
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id int64
+				var name string
+				rows.Scan(&id, &name)
+				trainerIDs[strings.TrimSpace(name)] = id
+			}
+		}
+	}
+
+	// Look up jockey IDs (batch)
+	if len(jockeys) > 0 {
+		jockeyList := make([]string, 0, len(jockeys))
+		for jockey := range jockeys {
+			jockeyList = append(jockeyList, jockey)
+		}
+		rows, err := tx.Query(`
+			SELECT jockey_id, jockey_name 
+			FROM racing.jockeys 
+			WHERE jockey_name = ANY($1)
+		`, pq.Array(jockeyList))
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id int64
+				var name string
+				rows.Scan(&id, &name)
+				jockeyIDs[strings.TrimSpace(name)] = id
+			}
+		}
+	}
+
+	// Look up owner IDs (batch)
+	if len(owners) > 0 {
+		ownerList := make([]string, 0, len(owners))
+		for owner := range owners {
+			ownerList = append(ownerList, owner)
+		}
+		rows, err := tx.Query(`
+			SELECT owner_id, owner_name 
+			FROM racing.owners 
+			WHERE owner_name = ANY($1)
+		`, pq.Array(ownerList))
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id int64
+				var name string
+				rows.Scan(&id, &name)
+				ownerIDs[strings.TrimSpace(name)] = id
+			}
+		}
+	}
+
+	// Populate foreign keys in the race data
+	for i := range races {
+		// Populate course_id for the race
+		if id, ok := courseIDs[strings.TrimSpace(races[i].Course)]; ok {
+			races[i].CourseID = int(id)
+		}
+
+		for j := range races[i].Runners {
+			runner := &races[i].Runners[j]
+
+			if id, ok := horseIDs[strings.TrimSpace(runner.Horse)]; ok {
+				runner.HorseID = int(id)
+			}
+			if id, ok := trainerIDs[strings.TrimSpace(runner.Trainer)]; ok {
+				runner.TrainerID = int(id)
+			}
+			if id, ok := jockeyIDs[strings.TrimSpace(runner.Jockey)]; ok {
+				runner.JockeyID = int(id)
+			}
+			if id, ok := ownerIDs[strings.TrimSpace(runner.Owner)]; ok {
+				runner.OwnerID = int(id)
+			}
+		}
+	}
+
+	log.Printf("    ✓ Populated foreign keys: %d courses, %d horses, %d trainers, %d jockeys, %d owners",
+		len(courseIDs), len(horseIDs), len(trainerIDs), len(jockeyIDs), len(ownerIDs))
+
+	return nil
 }

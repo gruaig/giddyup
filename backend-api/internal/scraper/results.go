@@ -141,6 +141,11 @@ func (s *ResultsScraper) scrapeRaceWithRetry(url string, maxRetries int) (Race, 
 
 		lastErr = err
 
+		// Don't retry international races - fail immediately
+		if strings.Contains(err.Error(), "skipping international race") {
+			return Race{}, err
+		}
+
 		// Check for rate limiting errors
 		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
 			waitTime := 5 * time.Minute
@@ -190,14 +195,26 @@ func (s *ResultsScraper) getRaceURLsForDate(date string) ([]string, error) {
 		return nil, err
 	}
 
-	// Find all race links
+	// Find all race links and filter for UK/IRE only
 	urls := []string{}
 	doc.Find("a[data-test-selector='link-listCourseNameLink']").Each(func(i int, sel *goquery.Selection) {
 		href, exists := sel.Attr("href")
 		if exists {
 			// href is like /results/32/newcastle/2025-10-14/123456
-			fullURL := "https://www.racingpost.com" + href
-			urls = append(urls, fullURL)
+			// Extract course_id from the URL
+			parts := strings.Split(href, "/")
+			if len(parts) >= 3 {
+				courseIDStr := parts[2]
+				courseID, err := strconv.Atoi(courseIDStr)
+				if err == nil {
+					// Check if this is a UK/IRE course
+					region := s.getRegionFromCourseID(courseID)
+					if region != "" { // Only include if it's UK or IRE
+						fullURL := "https://www.racingpost.com" + href
+						urls = append(urls, fullURL)
+					}
+				}
+			}
 		}
 	})
 
@@ -273,7 +290,7 @@ func (s *ResultsScraper) scrapeRace(url string) (Race, error) {
 	race.Runners = s.extractRunners(doc)
 	race.Ran = len(race.Runners)
 
-	// Determine region from course ID (simplified - would need full mapping)
+	// Determine region from course ID (should always be valid since we filter URLs)
 	race.Region = s.getRegionFromCourseID(race.CourseID)
 
 	// IMPORTANT: Region must be UPPERCASE for race_key generation to match Python
@@ -409,90 +426,359 @@ func (s *ResultsScraper) extractSurface(going string) string {
 	return "Turf"
 }
 
-// extractRunners extracts all runners from the results table
+// extractRunners extracts all runners from the results table using data-test-selector attributes
 func (s *ResultsScraper) extractRunners(doc *goquery.Document) []Runner {
 	runners := []Runner{}
 
-	// Find runner rows in results table
-	doc.Find("tr.rp-horseTable__mainRow, div.js-PC-runnerRow").Each(func(i int, sel *goquery.Selection) {
-		runner := Runner{}
-
-		// Position
-		pos := sel.Find("span.rp-horseTable__pos__number").First().Text()
-		runner.Pos = strings.TrimSpace(pos)
-
-		// Draw
-		draw := sel.Find("span.rp-horseTable__spanNarrow").First().Text()
-		if draw != "" {
-			runner.Draw, _ = strconv.Atoi(strings.TrimSpace(draw))
-		}
-
-		// Horse name and ID
-		horseLink := sel.Find("a.rp-horseTable__horse__name").First()
-		runner.Horse = CleanString(horseLink.Text())
-		if href, exists := horseLink.Attr("href"); exists {
-			// href like /horses/horse/123456/horse-name
-			parts := strings.Split(href, "/")
-			if len(parts) > 4 {
-				runner.HorseID, _ = strconv.Atoi(parts[4])
-			}
-		}
-
-		// Jockey and ID
-		jockeyLink := sel.Find("a.rp-horseTable__jockey__name").First()
-		runner.Jockey = CleanString(jockeyLink.Text())
-		if href, exists := jockeyLink.Attr("href"); exists {
-			parts := strings.Split(href, "/")
-			if len(parts) > 3 {
-				runner.JockeyID, _ = strconv.Atoi(parts[3])
-			}
-		}
-
-		// Trainer and ID
-		trainerLink := sel.Find("a.rp-horseTable__trainer__name").First()
-		runner.Trainer = CleanString(trainerLink.Text())
-		if href, exists := trainerLink.Attr("href"); exists {
-			parts := strings.Split(href, "/")
-			if len(parts) > 3 {
-				runner.TrainerID, _ = strconv.Atoi(parts[3])
-			}
-		}
-
-		// Age
-		age := sel.Find("td.rp-horseTable__age").First().Text()
-		runner.Age, _ = strconv.Atoi(strings.TrimSpace(age))
-
-		// Weight
-		weight := sel.Find("td.rp-horseTable__wgt").First().Text()
-		runner.Weight = strings.TrimSpace(weight)
-
-		// OR (Official Rating)
-		or := sel.Find("td.rp-horseTable__or").First().Text()
-		runner.OR, _ = strconv.Atoi(strings.TrimSpace(or))
-
-		// RPR
-		rpr := sel.Find("td.rp-horseTable__rpr").First().Text()
-		runner.RPR, _ = strconv.Atoi(strings.TrimSpace(rpr))
-
-		// SP (Starting Price)
-		sp := sel.Find("span.rp-horseTable__horse__price").First().Text()
-		runner.SP = strings.TrimSpace(sp)
-
-		// Only add if we got a horse name
-		if runner.Horse != "" {
-			runners = append(runners, runner)
+	// Extract all data using XPath-like selectors (matching Python scraper)
+	// Positions
+	positions := []string{}
+	doc.Find("span[data-test-selector='text-horsePosition']").Each(func(i int, s *goquery.Selection) {
+		if i%2 == 0 { // Python does del positions[1::2]
+			positions = append(positions, strings.TrimSpace(s.Text()))
 		}
 	})
+
+	// Horse names and IDs
+	horseNames := []string{}
+	horseIDs := []int{}
+	doc.Find("a[data-test-selector='link-horseName']").Each(func(i int, s *goquery.Selection) {
+		horseNames = append(horseNames, CleanString(s.Text()))
+		if href, exists := s.Attr("href"); exists {
+			parts := strings.Split(href, "/")
+			if len(parts) > 3 {
+				id, _ := strconv.Atoi(parts[3])
+				horseIDs = append(horseIDs, id)
+			}
+		}
+	})
+
+	// Jockey names and IDs (Python uses [::3] slice)
+	jockeyNames := []string{}
+	jockeyIDs := []int{}
+	doc.Find("a[data-test-selector='link-jockeyName']").Each(func(i int, s *goquery.Selection) {
+		if i%3 == 0 { // Python uses [::3]
+			jockeyNames = append(jockeyNames, CleanString(s.Text()))
+			if href, exists := s.Attr("href"); exists {
+				parts := strings.Split(href, "/")
+				if len(parts) > 3 {
+					id, _ := strconv.Atoi(parts[3])
+					jockeyIDs = append(jockeyIDs, id)
+				}
+			}
+		}
+	})
+
+	// Trainer names and IDs (Python uses [::2][::2])
+	trainerNames := []string{}
+	trainerIDs := []int{}
+	trainerTemp := []string{}
+	trainerIDTemp := []int{}
+	doc.Find("a[data-test-selector='link-trainerName']").Each(func(i int, s *goquery.Selection) {
+		if i%2 == 0 { // First [::2]
+			trainerTemp = append(trainerTemp, CleanString(s.Text()))
+			if href, exists := s.Attr("href"); exists {
+				parts := strings.Split(href, "/")
+				if len(parts) > 3 {
+					id, _ := strconv.Atoi(parts[3])
+					trainerIDTemp = append(trainerIDTemp, id)
+				}
+			}
+		}
+	})
+	// Second [::2]
+	for i := 0; i < len(trainerTemp); i += 2 {
+		if i < len(trainerTemp) {
+			trainerNames = append(trainerNames, trainerTemp[i])
+			if i < len(trainerIDTemp) {
+				trainerIDs = append(trainerIDs, trainerIDTemp[i])
+			}
+		}
+	}
+
+	// Owner names
+	ownerNames := []string{}
+	doc.Find("a[data-test-selector='link-silk']").Each(func(i int, s *goquery.Selection) {
+		if href, exists := s.Attr("href"); exists {
+			parts := strings.Split(href, "/")
+			if len(parts) > 4 {
+				// Convert URL slug to proper name
+				name := strings.ReplaceAll(parts[4], "-", " ")
+				name = strings.Title(strings.ToLower(name))
+				ownerNames = append(ownerNames, name)
+			}
+		}
+	})
+
+	// Ages
+	ages := []int{}
+	doc.Find("td[data-test-selector='horse-age']").Each(func(i int, s *goquery.Selection) {
+		age, _ := strconv.Atoi(strings.TrimSpace(s.Text()))
+		ages = append(ages, age)
+	})
+
+	// Draws
+	draws := []int{}
+	doc.Find("span.rp-horseTable__saddleClothNo").Each(func(i int, s *goquery.Selection) {
+		draw := strings.TrimSuffix(strings.TrimSpace(s.Text()), ".")
+		d, _ := strconv.Atoi(draw)
+		draws = append(draws, d)
+	})
+
+	// RPR ratings
+	rprs := []int{}
+	doc.Find("td[data-ending='RPR']").Each(func(i int, s *goquery.Selection) {
+		rpr, _ := strconv.Atoi(strings.TrimSpace(s.Text()))
+		rprs = append(rprs, rpr)
+	})
+
+	// OR (Official Rating)
+	ors := []int{}
+	doc.Find("td[data-ending='OR']").Each(func(i int, s *goquery.Selection) {
+		or, _ := strconv.Atoi(strings.TrimSpace(s.Text()))
+		ors = append(ors, or)
+	})
+
+	// TS (Top Speed)
+	tss := []int{}
+	doc.Find("td[data-ending='TS']").Each(func(i int, s *goquery.Selection) {
+		ts, _ := strconv.Atoi(strings.TrimSpace(s.Text()))
+		tss = append(tss, ts)
+	})
+
+	// Weights (st-lb format)
+	weights := []string{}
+	lbsValues := []int{}
+	stones := []string{}
+	pounds := []string{}
+	doc.Find("span[data-ending='st']").Each(func(i int, s *goquery.Selection) {
+		stones = append(stones, strings.TrimSpace(s.Text()))
+	})
+	doc.Find("span[data-ending='lb']").Each(func(i int, s *goquery.Selection) {
+		pounds = append(pounds, strings.TrimSpace(s.Text()))
+	})
+	for i := 0; i < len(stones) && i < len(pounds); i++ {
+		st, _ := strconv.Atoi(stones[i])
+		lb, _ := strconv.Atoi(pounds[i])
+		totalLbs := st*14 + lb
+		lbsValues = append(lbsValues, totalLbs)
+		weights = append(weights, fmt.Sprintf("%d-%d", st, lb))
+	}
+
+	// Comments
+	comments := []string{}
+	doc.Find("tr.rp-horseTable__commentRow td").Each(func(i int, s *goquery.Selection) {
+		comment := strings.TrimSpace(s.Text())
+		comment = strings.ReplaceAll(comment, "\n", " ")
+		comment = strings.ReplaceAll(comment, "\r", " ")
+		comment = strings.ReplaceAll(comment, "  ", " ")
+		comments = append(comments, comment)
+	})
+
+	// Pedigree info (sire, dam, damsire)
+	sires := []string{}
+	dams := []string{}
+	damsires := []string{}
+	pedigreeRows := doc.Find("tr[data-test-selector='block-pedigreeInfoFullResults']")
+	pedigreeRows.Each(func(i int, row *goquery.Selection) {
+		cells := row.Find("td")
+		if cells.Length() >= 3 {
+			sire := CleanString(cells.Eq(0).Text())
+			dam := CleanString(cells.Eq(1).Text())
+			damsire := CleanString(cells.Eq(2).Text())
+			sires = append(sires, sire)
+			dams = append(dams, dam)
+			damsires = append(damsires, damsire)
+		}
+	})
+
+	// Build runners from extracted data
+	numRunners := len(horseNames)
+	for i := 0; i < numRunners; i++ {
+		runner := Runner{}
+
+		// Basic info
+		if i < len(positions) {
+			runner.Pos = positions[i]
+		}
+		if i < len(draws) {
+			runner.Draw = draws[i]
+		}
+		runner.Num = i + 1 // Number based on position in table
+
+		// Horse
+		runner.Horse = horseNames[i]
+		if i < len(horseIDs) {
+			runner.HorseID = horseIDs[i]
+		}
+
+		// Jockey
+		if i < len(jockeyNames) {
+			runner.Jockey = jockeyNames[i]
+		}
+		if i < len(jockeyIDs) {
+			runner.JockeyID = jockeyIDs[i]
+		}
+
+		// Trainer
+		if i < len(trainerNames) {
+			runner.Trainer = trainerNames[i]
+		}
+		if i < len(trainerIDs) {
+			runner.TrainerID = trainerIDs[i]
+		}
+
+		// Owner
+		if i < len(ownerNames) {
+			runner.Owner = ownerNames[i]
+		}
+
+		// Physical attributes
+		if i < len(ages) {
+			runner.Age = ages[i]
+		}
+		if i < len(weights) {
+			runner.Weight = weights[i]
+		}
+		if i < len(lbsValues) {
+			runner.Lbs = lbsValues[i]
+		}
+
+		// Ratings
+		if i < len(rprs) {
+			runner.RPR = rprs[i]
+		}
+		if i < len(ors) {
+			runner.OR = ors[i]
+		}
+		if i < len(tss) {
+			runner.TS = tss[i]
+		}
+
+		// Comment
+		if i < len(comments) {
+			runner.Comment = comments[i]
+		}
+
+		// Pedigree
+		if i < len(sires) {
+			runner.Sire = sires[i]
+		}
+		if i < len(dams) {
+			runner.Dam = dams[i]
+		}
+		if i < len(damsires) {
+			runner.Damsire = damsires[i]
+		}
+
+		runners = append(runners, runner)
+	}
 
 	return runners
 }
 
-// getRegionFromCourseID maps course ID to region (simplified version)
+// getRegionFromCourseID maps course ID to region
+// Returns empty string for non-UK/IRE courses (international races we don't want)
 func (s *ResultsScraper) getRegionFromCourseID(courseID int) string {
-	// This is a simplified version - would need full course mapping
-	// Irish courses typically have higher IDs
-	if courseID > 1000 {
+	// UK courses (GB)
+	ukCourses := map[int]bool{
+		2:   true, // Aintree
+		3:   true, // Ascot
+		4:   true, // Ayr
+		7:   true, // Bangor
+		9:   true, // Bath
+		10:  true, // Beverley
+		11:  true, // Brighton
+		12:  true, // Chepstow
+		13:  true, // Carlisle
+		14:  true, // Cartmel
+		15:  true, // Catterick
+		16:  true, // Cheltenham
+		17:  true, // Chester
+		18:  true, // Doncaster
+		19:  true, // Epsom
+		20:  true, // Exeter
+		21:  true, // Fakenham
+		22:  true, // Ffos Las
+		24:  true, // Goodwood
+		25:  true, // Hexham
+		26:  true, // Haydock
+		27:  true, // Hereford
+		28:  true, // Huntingdon
+		29:  true, // Kelso
+		30:  true, // Kempton
+		31:  true, // Leicester
+		32:  true, // Lingfield
+		33:  true, // Ludlow
+		34:  true, // Market Rasen
+		36:  true, // Musselburgh
+		37:  true, // Newcastle
+		38:  true, // Newmarket
+		39:  true, // Newton Abbot
+		40:  true, // Newbury
+		41:  true, // Nottingham
+		42:  true, // Perth
+		43:  true, // Plumpton
+		44:  true, // Pontefract
+		45:  true, // Redcar
+		46:  true, // Ripon
+		47:  true, // Salisbury
+		48:  true, // Sandown
+		49:  true, // Sedgefield
+		51:  true, // Southwell
+		52:  true, // Stratford
+		53:  true, // Taunton
+		54:  true, // Thirsk
+		55:  true, // Towcester
+		56:  true, // Uttoxeter
+		57:  true, // Warwick
+		58:  true, // Wetherby
+		59:  true, // Wincanton
+		60:  true, // Windsor
+		61:  true, // Wolverhampton
+		62:  true, // Worcester
+		63:  true, // Yarmouth
+		107: true, // York
+		513: true, // Wolverhampton AW
+	}
+
+	// Irish courses (IRE)
+	irishCourses := map[int]bool{
+		102: true, // Ballinrobe
+		103: true, // Bellewstown
+		176: true, // Cork
+		177: true, // Curragh
+		178: true, // Down Royal
+		179: true, // Downpatrick
+		180: true, // Dundalk
+		181: true, // Fairyhouse
+		182: true, // Fairyhouse
+		183: true, // Galway
+		184: true, // Gowran Park
+		185: true, // Kilbeggan
+		186: true, // Killarney
+		187: true, // Laytown
+		188: true, // Leopardstown
+		189: true, // Limerick
+		190: true, // Listowel
+		191: true, // Navan
+		192: true, // Naas
+		193: true, // Punchestown
+		194: true, // Roscommon
+		195: true, // Sligo
+		196: true, // Thurles
+		197: true, // Tipperary
+		198: true, // Tramore
+		199: true, // Wexford
+	}
+
+	if ukCourses[courseID] {
+		return "gb"
+	}
+	if irishCourses[courseID] {
 		return "ire"
 	}
-	return "gb"
+
+	// Return empty for international courses
+	return ""
 }
