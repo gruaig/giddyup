@@ -440,18 +440,25 @@ Response includes per runner:
 
 ## Known Limitations
 
-### 1. Racing Post IP Ban
+### 1. In-Play Price Suspension ⚠️
+- **Issue**: Betfair removes pre-play prices when race goes in-play
+- **Impact**: No prices available from off-time until next-day BSP
+- **Timeline**: off_time → race finish (typically 2-5 minutes)
+- **UI Handling**: Display "In Play" or "Race Running" instead of price
+- **Workaround**: Use last known pre-play price with "LAST" indicator
+
+### 2. Racing Post IP Ban
 - **Issue**: Temporary 403 ban from `/results` endpoint
 - **Impact**: Cannot backfill Oct 11-14 currently
 - **Timeline**: Usually lifts in 12-24 hours
 - **Workaround**: `/racecards` endpoint still works ✅
 
-### 2. Betfair Delayed Data
+### 3. Betfair Delayed Data
 - **Delay**: 30-60 seconds behind real-time
 - **Reason**: Using delayed app key (free tier)
 - **Alternative**: Upgrade to live key for real-time data
 
-### 3. Session Token Expiry
+### 4. Session Token Expiry
 - **Lifespan**: ~8 hours
 - **Auto-refresh**: Implemented in service
 - **Fallback**: Re-login with username/password if token expires

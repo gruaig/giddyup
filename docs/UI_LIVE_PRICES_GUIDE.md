@@ -132,6 +132,41 @@ function getRaceStatus(race: Race): "upcoming" | "in-play" | "resulted" {
 }
 ```
 
+### ⚠️ IMPORTANT: In-Play Behavior
+
+**Betfair removes pre-play prices when races go in-play** (after the off-time). This means:
+
+- **Before off-time**: Live prices update every 60s ✅
+- **After off-time (in-play)**: Prices disappear from API ⚠️
+- **After results**: Official BSP available next day ✅
+
+**What this means for your UI:**
+```typescript
+function PriceDisplay({ race, runner }: { race: Race; runner: Runner }) {
+  const status = getRaceStatus(race);
+  const hasPrice = runner.win_ppwap != null;
+  
+  if (status === "in-play" && !hasPrice) {
+    return (
+      <div className="flex items-center gap-2 text-gray-500">
+        <ClockIcon size={16} />
+        <span className="text-sm">In Play</span>
+      </div>
+    );
+  }
+  
+  if (status === "upcoming" && hasPrice) {
+    return <LivePrice runner={runner} />;  // Show live price
+  }
+  
+  if (status === "resulted" && hasPrice) {
+    return <HistoricalPrice runner={runner} />;  // Show BSP
+  }
+  
+  return <span className="text-gray-400">-</span>;
+}
+```
+
 ## Price Display Strategy
 
 ### For Today's Races (Live)
@@ -139,7 +174,19 @@ function getRaceStatus(race: Race): "upcoming" | "in-play" | "resulted" {
 Display the VWAP with optional range:
 
 ```tsx
-function LivePrice({ runner }: { runner: Runner }) {
+function LivePrice({ runner, race }: { runner: Runner; race: Race }) {
+  const status = getRaceStatus(race);
+  
+  // Handle in-play races (Betfair removes prices after off-time)
+  if (status === "in-play" && !runner.win_ppwap) {
+    return (
+      <div className="flex items-center gap-1 text-sm text-gray-500">
+        <span>In Play</span>
+        <span className="text-xs">(Prices suspended)</span>
+      </div>
+    );
+  }
+  
   if (!runner.win_ppwap) {
     return <span className="text-gray-400">-</span>;
   }
@@ -628,11 +675,36 @@ function StatusBadge({ status }: { status: string }) {
 
 ### Update Frequencies
 
-| Data Type | Update Frequency | Source |
-|-----------|-----------------|--------|
-| Today's race structure | Once at startup (6am) | Racing Post racecards |
-| Live prices | Every 60 seconds | Betfair API (30-60s delayed) |
-| Historical results | Once per day | Racing Post results + Betfair BSP |
+| Data Type | Update Frequency | Source | Notes |
+|-----------|-----------------|--------|-------|
+| Today's race structure | Once at startup (6am) | Racing Post racecards | |
+| Live prices (pre-play) | Every 60 seconds | Betfair API (30-60s delayed) | **Only before off-time** |
+| In-play prices | ❌ Not available | Betfair suspends | Prices disappear during race |
+| Historical results | Once per day | Racing Post results + Betfair BSP | Next morning |
+
+### ⚠️ In-Play Price Gap
+
+**Timeline:**
+1. **Pre-race** (6am - off_time): Live prices update every 60s ✅
+2. **In-play** (off_time - finish): **NO PRICES** - Betfair suspends market ⚠️
+3. **Post-race** (finish - next morning): Waiting for results ⏳
+4. **Next day**: Official BSP and results available ✅
+
+**Handle this in your UI:**
+```typescript
+const racePhase = getRacePhase(race);
+
+switch (racePhase) {
+  case 'pre-play':
+    return <LivePrice runner={runner} />;
+  case 'in-play':
+    return <InPlayIndicator />;  // "Race in progress"
+  case 'awaiting-results':
+    return <AwaitingResults />;  // "Results pending"
+  case 'resulted':
+    return <OfficialPrice runner={runner} />;
+}
+```
 
 ### Polling Guidelines
 
