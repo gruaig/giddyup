@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -13,7 +14,10 @@ import (
 )
 
 type SportingLifeScraper struct {
-	client *http.Client
+	client           *http.Client
+	userAgents       []string
+	lastRequestTime  time.Time
+	consecutiveFails int
 }
 
 func NewSportingLifeScraper() *SportingLifeScraper {
@@ -21,7 +25,49 @@ func NewSportingLifeScraper() *SportingLifeScraper {
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		userAgents: []string{
+			// Chrome - various versions and platforms
+			"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+			"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+			// Firefox - various versions
+			"Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0",
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
+			// Safari
+			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15",
+			// Edge
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
+			// Opera
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/106.0.0.0",
+			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/106.0.0.0",
+		},
+		lastRequestTime:  time.Now(),
+		consecutiveFails: 0,
 	}
+}
+
+// randomUserAgent returns a random user agent string
+func (s *SportingLifeScraper) randomUserAgent() string {
+	return s.userAgents[rand.Intn(len(s.userAgents))]
+}
+
+// rateLimit ensures we don't spam Sporting Life
+func (s *SportingLifeScraper) rateLimit() {
+	elapsed := time.Since(s.lastRequestTime)
+	minDelay := 400 * time.Millisecond // Minimum 400ms between requests
+	
+	if elapsed < minDelay {
+		sleep := minDelay - elapsed
+		time.Sleep(sleep)
+	}
+	
+	s.lastRequestTime = time.Now()
 }
 
 // GetRacesForDate fetches races from Sporting Life with full runner details
@@ -37,9 +83,17 @@ func (s *SportingLifeScraper) GetRacesForDate(date string) ([]Race, error) {
 		return nil, err
 	}
 	
-	// Set headers to look like a browser
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	// Set headers to look like a real browser (with rotation)
+	req.Header.Set("User-Agent", s.randomUserAgent())
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-GB,en;q=0.9,en-US;q=0.8")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("DNT", "1")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	
+	// Rate limit before request
+	s.rateLimit()
 	
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -118,10 +172,7 @@ func (s *SportingLifeScraper) GetRacesForDate(date string) ([]Race, error) {
 		
 		races = append(races, raceWithRunners)
 		
-		// Rate limit: small delay between requests
-		if i < len(raceURLs)-1 {
-			time.Sleep(500 * time.Millisecond)
-		}
+		// No additional sleep needed - rateLimit() handles it automatically
 	}
 	
 	log.Printf("[SportingLife] ✅ Fetched %d races with full runner data for %s", len(races), date)
@@ -135,8 +186,15 @@ func (s *SportingLifeScraper) fetchRaceDetails(url string, meeting SportingLifeM
 		return Race{}, err
 	}
 	
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	// Set headers with rotation
+	req.Header.Set("User-Agent", s.randomUserAgent())
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-GB,en;q=0.9,en-US;q=0.8")
+	req.Header.Set("DNT", "1")
+	req.Header.Set("Referer", "https://www.sportinglife.com/racing/racecards")
+	
+	// Rate limit
+	s.rateLimit()
 	
 	resp, err := s.client.Do(req)
 	if err != nil {
