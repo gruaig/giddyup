@@ -333,10 +333,25 @@ func (bs *BetfairStitcher) extractVenue(menuHint string) string {
 	return venue
 }
 
-// convertBetfairTimeToLocal converts Betfair event_dt (UTC) to UK local time
-// Uses proper timezone conversion (Europe/London) - handles BST/GMT automatically
-func (bs *BetfairStitcher) convertBetfairTimeToLocal(eventDt string) string {
-	return ParseBetfairTimeToLocal(eventDt)
+// adjustBetfairTimeToLocal adjusts Betfair GMT time to UK local (handles BST)
+// Betfair CSV uses GMT year-round, so we need to add 1 hour during BST
+func (bs *BetfairStitcher) adjustBetfairTimeToLocal(eventDt string, hhmmGMT string) string {
+	// Parse the date from event_dt
+	date := bs.extractDate(eventDt)
+	
+	// Create a time in GMT
+	datetime := fmt.Sprintf("%sT%s:00Z", date, hhmmGMT)
+	gmtTime, err := time.Parse("2006-01-02T15:04:05Z", datetime)
+	if err != nil {
+		// Fallback to raw time
+		return hhmmGMT
+	}
+	
+	// Convert to UK local (this handles BST/GMT automatically)
+	localTime := gmtTime.In(UK())
+	
+	// Return HH:MM in local time
+	return localTime.Format("15:04")
 }
 
 // saveStitchedRace saves a stitched race to CSV
