@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -230,8 +231,8 @@ func (bs *BetfairStitcher) stitchWinPlace(winRows, placeRows []RawBetfairRow) []
 
 		race := StitchedRace{}
 		if len(winRunners) > 0 {
-			// Extract time from event_dt
-			race.OffTime = bs.extractTime(winRunners[0].EventDt)
+			// Convert Betfair time to match Sporting Life (subtract 1 hour)
+			race.OffTime = bs.convertBetfairTimeToLocal(winRunners[0].EventDt)
 			race.EventName = winRunners[0].EventName
 			// Use date from event_dt (this is the actual race date)
 			race.Date = bs.extractDate(winRunners[0].EventDt)
@@ -331,6 +332,32 @@ func (bs *BetfairStitcher) extractVenue(menuHint string) string {
 		venue = strings.TrimSpace(venue[:idx])
 	}
 	return venue
+}
+
+// convertBetfairTimeToLocal converts Betfair time to match Sporting Life
+// Betfair CSV times appear to be 1 hour ahead - subtract 1 hour
+func (bs *BetfairStitcher) convertBetfairTimeToLocal(eventDt string) string {
+	// Extract time from event_dt  
+	hhmmBF := bs.extractTime(eventDt)
+	
+	// Parse time
+	if len(hhmmBF) != 5 || hhmmBF[2] != ':' {
+		return hhmmBF // Can't parse, return as-is
+	}
+	
+	h, err1 := strconv.Atoi(hhmmBF[:2])
+	m, err2 := strconv.Atoi(hhmmBF[3:5])
+	if err1 != nil || err2 != nil {
+		return hhmmBF
+	}
+	
+	// Subtract 1 hour (Betfair seems to be ahead by 1 hour)
+	h = h - 1
+	if h < 0 {
+		h = 23
+	}
+	
+	return fmt.Sprintf("%02d:%02d", h, m)
 }
 
 // saveStitchedRace saves a stitched race to CSV
