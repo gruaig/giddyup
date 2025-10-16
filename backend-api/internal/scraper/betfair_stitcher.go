@@ -335,22 +335,22 @@ func (bs *BetfairStitcher) extractVenue(menuHint string) string {
 }
 
 // adjustBetfairTimeToLocal adjusts Betfair CSV time to match Sporting Life
-// Betfair CSV times are consistently 1 hour ahead - subtract 1 hour  
+// Betfair CSV times are consistently 1 hour ahead - subtract 1 hour
 // TODO: Investigate why Europe/London conversion doesn't work as expected
 func (bs *BetfairStitcher) adjustBetfairTimeToLocal(eventDt string, hhmmBF string) string {
 	// Simple -1 hour adjustment (works reliably)
 	if len(hhmmBF) != 5 || hhmmBF[2] != ':' {
 		return hhmmBF
 	}
-	
+
 	h := (int(hhmmBF[0]-'0')*10 + int(hhmmBF[1]-'0'))
 	m := hhmmBF[3:5]
-	
+
 	h = h - 1
 	if h < 0 {
 		h = 23
 	}
-	
+
 	return fmt.Sprintf("%02d:%s", h, m)
 }
 
