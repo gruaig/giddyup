@@ -34,7 +34,7 @@ func MatchAndMerge(slRaces []Race, bfRaces []StitchedRace) []Race {
 		log.Println("   ⚠️  WARNING: No Betfair data loaded - check CSV files exist")
 		return slRaces
 	}
-	
+
 	// DEBUG: Show ALL unique venues
 	bfVenues := make(map[string]bool)
 	for _, bfRace := range bfRaces {
@@ -42,16 +42,16 @@ func MatchAndMerge(slRaces []Race, bfRaces []StitchedRace) []Race {
 			bfVenues[NormalizeCourseName(bfRace.Venue)] = true
 		}
 	}
-	
+
 	slVenues := make(map[string]bool)
 	for _, slRace := range slRaces {
 		if slRace.Course != "" {
 			slVenues[NormalizeCourseName(slRace.Course)] = true
 		}
 	}
-	
+
 	log.Printf("   🔍 DEBUG: Betfair has %d unique venues, Sporting Life has %d unique venues", len(bfVenues), len(slVenues))
-	
+
 	// Find overlaps
 	overlaps := 0
 	for venue := range slVenues {
@@ -60,7 +60,7 @@ func MatchAndMerge(slRaces []Race, bfRaces []StitchedRace) []Race {
 		}
 	}
 	log.Printf("   🔍 DEBUG: %d venues overlap between datasets", overlaps)
-	
+
 	// Show non-matching venues
 	log.Println("   🔍 DEBUG: Sporting Life venues NOT in Betfair:")
 	for venue := range slVenues {
@@ -110,11 +110,11 @@ func MatchAndMerge(slRaces []Race, bfRaces []StitchedRace) []Race {
 
 		if !found {
 			// DEBUG: Show why this race didn't match
-			log.Printf("      ❌ No match: %s @ %s (%s)", 
+			log.Printf("      ❌ No match: %s @ %s (%s)",
 				race.Course, race.OffTime, race.RaceName[:min(30, len(race.RaceName))])
 			continue
 		}
-		
+
 		matchedCount++
 		log.Printf("      ✅ Matched: %s @ %s", race.Course, race.OffTime)
 
@@ -147,7 +147,7 @@ func MatchAndMerge(slRaces []Race, bfRaces []StitchedRace) []Race {
 		}
 	}
 
-	log.Printf("   • Matched %d/%d races (by course: %d, by name: %d)", 
+	log.Printf("   • Matched %d/%d races (by course: %d, by name: %d)",
 		matchedCount, len(slRaces), matchedByCourse, matchedByName)
 	return slRaces
 }
@@ -159,12 +159,68 @@ func min(a, b int) int {
 	return b
 }
 
-// normalizeTimeToHHMM strips seconds from time: "12:35:00" → "12:35"
-func normalizeTimeToHHMM(t string) string {
-	if len(t) >= 5 {
-		return t[:5]
+// normalizeTimeToHHMM handles all time formats and returns canonical "HH:MM"
+func normalizeTimeToHHMM(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
 	}
-	return t
+	
+	// Fast-path: exact "HH:MM"
+	if len(s) == 5 && s[2] == ':' && s[0] >= '0' && s[0] <= '2' {
+		return s
+	}
+	
+	// Accept "HH:MM:SS"
+	if len(s) >= 7 && strings.Count(s, ":") >= 2 {
+		parts := strings.SplitN(s, ":", 3)
+		if len(parts) >= 2 {
+			h, err1 := strconv.Atoi(parts[0])
+			m, err2 := strconv.Atoi(parts[1])
+			if err1 == nil && err2 == nil && h >= 0 && h < 24 && m >= 0 && m < 60 {
+				return fmt.Sprintf("%02d:%02d", h, m)
+			}
+		}
+	}
+	
+	// Accept "H:MM" and "HH:MM" (non-zero-padded hour)
+	if strings.Count(s, ":") == 1 {
+		parts := strings.SplitN(s, ":", 2)
+		if len(parts) == 2 {
+			h, err1 := strconv.Atoi(parts[0])
+			m, err2 := strconv.Atoi(parts[1])
+			if err1 == nil && err2 == nil && h >= 0 && h < 24 && m >= 0 && m < 60 {
+				return fmt.Sprintf("%02d:%02d", h, m)
+			}
+		}
+	}
+	
+	// Accept "HHMM" and "HMM"
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, s)
+	
+	if len(digits) == 4 {
+		h, err1 := strconv.Atoi(digits[:2])
+		m, err2 := strconv.Atoi(digits[2:])
+		if err1 == nil && err2 == nil && h >= 0 && h < 24 && m >= 0 && m < 60 {
+			return fmt.Sprintf("%02d:%02d", h, m)
+		}
+	}
+	
+	if len(digits) == 3 { // e.g. "935" => "09:35"
+		h, err1 := strconv.Atoi(digits[:1])
+		m, err2 := strconv.Atoi(digits[1:])
+		if err1 == nil && err2 == nil && h >= 0 && h < 24 && m >= 0 && m < 60 {
+			return fmt.Sprintf("%02d:%02d", h, m)
+		}
+	}
+	
+	// Last resort: return as-is (better to see it in debug)
+	return s
 }
 
 // parseFloat safely converts string to float64

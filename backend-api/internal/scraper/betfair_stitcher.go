@@ -462,7 +462,7 @@ func (bs *BetfairStitcher) readStitchedCSV(filePath string) (StitchedRace, error
 		if hasVenue {
 			minCols = 27
 		}
-		
+
 		if i == 0 || len(record) < minCols {
 			continue
 		}
