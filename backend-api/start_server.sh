@@ -1,42 +1,70 @@
 #!/bin/bash
 
-# GiddyUp API Server Startup Script
+# GiddyUp API Server Startup Script (Background)
+# Starts the API in the background with proper logging
 
-PORT=${SERVER_PORT:-8000}
-LOG_FILE=${LOG_FILE:-/tmp/giddyup-api.log}
+set -e  # Exit on error
 
-echo "🚀 Starting GiddyUp API Server"
-echo "Port: $PORT"
-echo "Log file: $LOG_FILE"
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
 
-# Kill existing processes on the port
-echo "Cleaning up existing processes..."
-lsof -ti:$PORT 2>/dev/null | xargs -r kill -9 2>/dev/null
-fuser -k $PORT/tcp 2>/dev/null
-sleep 1
+echo -e "${BLUE}🏇 Starting GiddyUp API Server (background mode)...${NC}"
 
-# Start server
-cd /home/smonaghan/GiddyUp/backend-api
-
-echo "Starting server..."
-SERVER_PORT=$PORT LOG_LEVEL=DEBUG ./bin/api > $LOG_FILE 2>&1 &
-SERVER_PID=$!
-
-echo "Server PID: $SERVER_PID"
-echo $SERVER_PID > /tmp/giddyup-api.pid
-
-# Wait and verify
-sleep 3
-
-if curl -s http://localhost:$PORT/health > /dev/null 2>&1; then
-    echo "✅ Server is running on http://localhost:$PORT"
-    echo "   Health: http://localhost:$PORT/health"
-    echo "   API: http://localhost:$PORT/api/v1/"
-    echo "   Logs: tail -f $LOG_FILE"
-    exit 0
-else
-    echo "❌ Server failed to start"
-    echo "Check logs: cat $LOG_FILE"
+# Check if we're in the right directory
+if [ ! -f "bin/api" ]; then
+    echo -e "${RED}❌ Error: bin/api not found. Please build first:${NC}"
+    echo -e "   go build -o bin/api cmd/api/main.go"
     exit 1
 fi
 
+# Source environment variables
+if [ -f "../settings.env" ]; then
+    echo -e "${GREEN}✅ Loading environment variables from settings.env${NC}"
+    source ../settings.env
+else
+    echo -e "${YELLOW}⚠️  Warning: settings.env not found, using defaults${NC}"
+fi
+
+# Create logs directory if it doesn't exist
+mkdir -p logs
+
+# Kill any existing API process on port 8000
+if lsof -ti:8000 > /dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  Port 8000 is in use, killing existing process...${NC}"
+    lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+    sleep 2
+fi
+
+# Start the API server in background
+echo -e "${BLUE}🚀 Starting API on port ${PORT:-8000} (background)...${NC}"
+echo -e "${BLUE}📝 Logging to: logs/server.log${NC}"
+echo ""
+
+nohup ./bin/api > logs/server.log 2>&1 &
+API_PID=$!
+
+sleep 2
+
+# Check if process is still running
+if ps -p $API_PID > /dev/null; then
+    echo -e "${GREEN}✅ API server started successfully!${NC}"
+    echo -e "${GREEN}   PID: $API_PID${NC}"
+    echo -e "${GREEN}   URL: http://localhost:${PORT:-8000}${NC}"
+    echo -e "${GREEN}   Health: http://localhost:${PORT:-8000}/health${NC}"
+    echo ""
+    echo -e "${BLUE}📊 View logs:${NC}"
+    echo -e "   tail -f logs/server.log"
+    echo ""
+    echo -e "${BLUE}🛑 Stop server:${NC}"
+    echo -e "   kill $API_PID"
+    echo -e "   # or"
+    echo -e "   pkill -f 'bin/api'"
+else
+    echo -e "${RED}❌ Failed to start API server. Check logs/server.log${NC}"
+    cat logs/server.log | tail -20
+    exit 1
+fi
