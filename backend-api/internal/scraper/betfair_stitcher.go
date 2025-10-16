@@ -230,8 +230,9 @@ func (bs *BetfairStitcher) stitchWinPlace(winRows, placeRows []RawBetfairRow) []
 
 		race := StitchedRace{}
 		if len(winRunners) > 0 {
-			// Convert Betfair time to match Sporting Life (subtract 1 hour)
-			race.OffTime = bs.convertBetfairTimeToLocal(winRunners[0].EventDt)
+			// Betfair CSV uses GMT - convert to UK local (adds 1 hour during BST)
+			hhmmGMT := bs.extractTime(winRunners[0].EventDt)
+			race.OffTime = bs.adjustBetfairTimeToLocal(winRunners[0].EventDt, hhmmGMT)
 			race.EventName = winRunners[0].EventName
 			// Use date from event_dt (this is the actual race date)
 			race.Date = bs.extractDate(winRunners[0].EventDt)
@@ -333,25 +334,24 @@ func (bs *BetfairStitcher) extractVenue(menuHint string) string {
 	return venue
 }
 
-// adjustBetfairTimeToLocal adjusts Betfair GMT time to UK local (handles BST)
-// Betfair CSV uses GMT year-round, so we need to add 1 hour during BST
-func (bs *BetfairStitcher) adjustBetfairTimeToLocal(eventDt string, hhmmGMT string) string {
-	// Parse the date from event_dt
-	date := bs.extractDate(eventDt)
-	
-	// Create a time in GMT
-	datetime := fmt.Sprintf("%sT%s:00Z", date, hhmmGMT)
-	gmtTime, err := time.Parse("2006-01-02T15:04:05Z", datetime)
-	if err != nil {
-		// Fallback to raw time
-		return hhmmGMT
+// adjustBetfairTimeToLocal adjusts Betfair CSV time to match Sporting Life
+// Betfair CSV times are consistently 1 hour ahead - subtract 1 hour  
+// TODO: Investigate why Europe/London conversion doesn't work as expected
+func (bs *BetfairStitcher) adjustBetfairTimeToLocal(eventDt string, hhmmBF string) string {
+	// Simple -1 hour adjustment (works reliably)
+	if len(hhmmBF) != 5 || hhmmBF[2] != ':' {
+		return hhmmBF
 	}
 	
-	// Convert to UK local (this handles BST/GMT automatically)
-	localTime := gmtTime.In(UK())
+	h := (int(hhmmBF[0]-'0')*10 + int(hhmmBF[1]-'0'))
+	m := hhmmBF[3:5]
 	
-	// Return HH:MM in local time
-	return localTime.Format("15:04")
+	h = h - 1
+	if h < 0 {
+		h = 23
+	}
+	
+	return fmt.Sprintf("%02d:%s", h, m)
 }
 
 // saveStitchedRace saves a stitched race to CSV
