@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"time"
 
 	"giddyup/api/internal/scraper"
@@ -102,24 +101,24 @@ func main() {
 	// Step 2: Fetch and stitch Betfair data
 	log.Println("📥 [2/4] Fetching Betfair CSV data...")
 	bfStitcher := scraper.NewBetfairStitcher(dataDir)
-	
+
 	log.Printf("   • Stitching UK Betfair data...")
 	bfStitcher.StitchBetfairForDate(dateStr, "uk")
-	
+
 	log.Printf("   • Stitching IRE Betfair data...")
 	bfStitcher.StitchBetfairForDate(dateStr, "ire")
 
 	bfUK, _ := bfStitcher.LoadStitchedRacesForDate(dateStr, "uk")
 	bfIRE, _ := bfStitcher.LoadStitchedRacesForDate(dateStr, "ire")
 	allBetfair := append(bfUK, bfIRE...)
-	
+
 	log.Printf("✅ Got %d Betfair races (UK: %d, IRE: %d)", len(allBetfair), len(bfUK), len(bfIRE))
 	log.Println("")
 
-	// Step 3: Match and merge
+	// Step 3: Match and merge (using shared logic)
 	log.Println("🔀 [3/4] Matching and merging Sporting Life ↔ Betfair...")
-	mergedRaces := matchAndMerge(races, allBetfair)
-	log.Printf("✅ Merged %d races", len(mergedRaces))
+	mergedRaces := scraper.MatchAndMerge(races, allBetfair)
+	log.Printf("✅ Merged races")
 	log.Println("")
 
 	// Step 4: Insert to database
@@ -128,7 +127,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("❌ Database insert failed: %v", err)
 	}
-	
+
 	log.Println("")
 	log.Println("🎉 SUCCESS!")
 	log.Printf("✅ Inserted %d races with %d runners for %s", racesInserted, runnersInserted, dateStr)
@@ -141,69 +140,8 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-func matchAndMerge(slRaces []scraper.Race, bfRaces []scraper.StitchedRace) []scraper.Race {
-	// Build Betfair lookup map
-	bfMap := make(map[string]scraper.StitchedRace)
-	for _, bfRace := range bfRaces {
-		normName := scraper.NormalizeName(bfRace.EventName)
-		normTime := normalizeTime(bfRace.OffTime)
-		key := fmt.Sprintf("%s|%s|%s", bfRace.Date, normName, normTime)
-		bfMap[key] = bfRace
-	}
-
-	// Match and merge
-	matchedCount := 0
-	for i := range slRaces {
-		race := &slRaces[i]
-		normName := scraper.NormalizeName(race.RaceName)
-		normTime := normalizeTime(race.OffTime)
-		key := fmt.Sprintf("%s|%s|%s", race.Date, normName, normTime)
-
-		bfRace, found := bfMap[key]
-		if !found {
-			continue
-		}
-
-		matchedCount++
-
-		// Build Betfair runner map by horse name
-		bfRunnerMap := make(map[string]scraper.StitchedRunner)
-		for _, bfRunner := range bfRace.Runners {
-			normHorse := scraper.NormalizeName(bfRunner.Horse)
-			bfRunnerMap[normHorse] = bfRunner
-		}
-
-		// Merge Betfair prices into runners
-		for j := range race.Runners {
-			runner := &race.Runners[j]
-			normHorse := scraper.NormalizeName(runner.Horse)
-
-			if bfRunner, found := bfRunnerMap[normHorse]; found {
-				runner.WinBSP = parseFloat(bfRunner.WinBSP)
-				runner.WinPPWAP = parseFloat(bfRunner.WinPPWAP)
-				runner.WinMorningWAP = parseFloat(bfRunner.WinMorningWAP)
-				runner.WinPPMax = parseFloat(bfRunner.WinPPMax)
-				runner.WinPPMin = parseFloat(bfRunner.WinPPMin)
-				runner.PlaceBSP = parseFloat(bfRunner.PlaceBSP)
-				runner.PlacePPWAP = parseFloat(bfRunner.PlacePPWAP)
-				runner.PlaceMorningWAP = parseFloat(bfRunner.PlaceMorningWAP)
-				runner.PlacePPMax = parseFloat(bfRunner.PlacePPMax)
-				runner.PlacePPMin = parseFloat(bfRunner.PlacePPMin)
-			}
-		}
-	}
-
-	log.Printf("   • Matched %d/%d races with Betfair data", matchedCount, len(slRaces))
-	return slRaces
-}
-
-func normalizeTime(t string) string {
-	// Normalize time to HH:MM format
-	if len(t) >= 5 {
-		return t[:5] // "12:35:00" -> "12:35"
-	}
-	return t
-}
+// Matching logic moved to internal/scraper/matcher.go (shared function)
+// Old matchAndMerge, normalizeTime, and parseFloat functions removed - now using shared scraper package
 
 func insertToDatabase(db *sql.DB, dateStr string, races []scraper.Race) (int, int, error) {
 	ctx := context.Background()
@@ -478,14 +416,4 @@ func nullFloat64BSP(f float64) interface{} {
 	return f
 }
 
-func parseFloat(s string) float64 {
-	if s == "" {
-		return 0.0
-	}
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0.0
-	}
-	return f
-}
-
+// parseFloat moved to internal/scraper/matcher.go (shared function)

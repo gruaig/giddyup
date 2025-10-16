@@ -337,9 +337,9 @@ func (s *AutoUpdateService) backfillDate(dateStr string) (int, int, error) {
 	bfIRE, _ := bfStitcher.LoadStitchedRacesForDate(dateStr, "ire")
 	log.Printf("[AutoUpdate]   ✓ Got %d Betfair races (UK: %d, IRE: %d)", len(bfUK)+len(bfIRE), len(bfUK), len(bfIRE))
 
-	// Step 3: Match and merge (simple matching for now)
+	// Step 3: Match and merge (using shared course+time logic)
 	log.Printf("[AutoUpdate]   [3/4] Matching Sporting Life with Betfair data...")
-	mergedRaces := s.matchAndMerge(rpRaces, append(bfUK, bfIRE...))
+	mergedRaces := scraper.MatchAndMerge(rpRaces, append(bfUK, bfIRE...))
 	log.Printf("[AutoUpdate]   ✓ Merged %d races", len(mergedRaces))
 
 	// Step 4: Insert to database
@@ -353,67 +353,7 @@ func (s *AutoUpdateService) backfillDate(dateStr string) (int, int, error) {
 	return races, runners, nil
 }
 
-// matchAndMerge matches Sporting Life races with Betfair prices (simplified)
-func (s *AutoUpdateService) matchAndMerge(rpRaces []scraper.Race, bfRaces []scraper.StitchedRace) []scraper.Race {
-	// Build Betfair lookup map by (date, normalized race_name, off_time)
-	bfMap := make(map[string]scraper.StitchedRace)
-	for _, bfRace := range bfRaces {
-		normName := scraper.NormalizeName(bfRace.EventName)
-		normTime := normalizeTime(bfRace.OffTime)
-		key := fmt.Sprintf("%s|%s|%s", bfRace.Date, normName, normTime)
-		bfMap[key] = bfRace
-	}
-
-	// Match Sporting Life races with Betfair
-	matchedRaces := 0
-	totalRunnerMatches := 0
-
-	for i := range rpRaces {
-		race := &rpRaces[i]
-		normName := scraper.NormalizeName(race.RaceName)
-		normTime := normalizeTime(race.OffTime)
-		key := fmt.Sprintf("%s|%s|%s", race.Date, normName, normTime)
-
-		bfRace, found := bfMap[key]
-		if !found {
-			continue
-		}
-
-		// Build runner lookup by normalized horse name
-		bfRunnerMap := make(map[string]scraper.StitchedRunner)
-		for _, bfRunner := range bfRace.Runners {
-			normHorse := scraper.NormalizeName(bfRunner.Horse)
-			bfRunnerMap[normHorse] = bfRunner
-		}
-
-		// Merge Betfair prices into Sporting Life runners
-		runnersMatched := 0
-		for j := range race.Runners {
-			runner := &race.Runners[j]
-			normHorse := scraper.NormalizeName(runner.Horse)
-
-			if bfRunner, found := bfRunnerMap[normHorse]; found {
-				runner.WinBSP = parseFloat(bfRunner.WinBSP)
-				runner.WinPPWAP = parseFloat(bfRunner.WinPPWAP)
-				runner.PlaceBSP = parseFloat(bfRunner.PlaceBSP)
-				runner.PlacePPWAP = parseFloat(bfRunner.PlacePPWAP)
-				runnersMatched++
-			}
-		}
-
-		if runnersMatched > 0 {
-			matchedRaces++
-			totalRunnerMatches += runnersMatched
-			log.Printf("[AutoUpdate]     ✓ Matched %s @ %s: %d/%d runners with Betfair prices",
-				race.Course, race.OffTime, runnersMatched, len(race.Runners))
-		}
-	}
-
-	log.Printf("[AutoUpdate]   Summary: %d/%d races matched, %d total runners with Betfair prices",
-		matchedRaces, len(rpRaces), totalRunnerMatches)
-
-	return rpRaces
-}
+// matchAndMerge moved to shared scraper.MatchAndMerge() in internal/scraper/matcher.go
 
 // insertToDatabase inserts races and runners into the database
 func (s *AutoUpdateService) insertToDatabase(dateStr string, races []scraper.Race, prelim bool) (int, int, error) {
@@ -557,28 +497,7 @@ func generateRunnerKey(raceKey string, runner scraper.Runner) string {
 	return fmt.Sprintf("%x", hash)
 }
 
-func normalizeTime(t string) string {
-	t = strings.TrimSpace(t)
-	if len(t) == 5 && t[2] == ':' {
-		return t
-	}
-	if len(t) == 4 && t[1] == ':' {
-		return "0" + t
-	}
-	return t
-}
-
-func parseFloat(s string) float64 {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0.0
-	}
-	val, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0.0
-	}
-	return val
-}
+// normalizeTime and parseFloat moved to internal/scraper/matcher.go (shared functions)
 
 // loadRacesFromDB loads races from database with runner IDs populated
 func (s *AutoUpdateService) loadRacesFromDB(dateStr string) ([]scraper.Race, map[string]int64, error) {

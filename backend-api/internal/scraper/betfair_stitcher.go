@@ -22,6 +22,7 @@ type StitchedRace struct {
 	Date      string
 	OffTime   string
 	EventName string
+	Venue     string // Course name extracted from menu_hint
 	Runners   []StitchedRunner
 }
 
@@ -101,7 +102,7 @@ func (bs *BetfairStitcher) StitchBetfairForDate(date string, region string) erro
 		return err
 	}
 	downloadDate := raceDate.AddDate(0, 0, 1) // Add 1 day
-	
+
 	// Convert download date to Betfair format (DDMMYYYY)
 	dateStr := downloadDate.Format("02012006")
 
@@ -234,6 +235,8 @@ func (bs *BetfairStitcher) stitchWinPlace(winRows, placeRows []RawBetfairRow) []
 			race.EventName = winRunners[0].EventName
 			// Use date from event_dt (this is the actual race date)
 			race.Date = bs.extractDate(winRunners[0].EventDt)
+			// Extract venue from menu_hint
+			race.Venue = bs.extractVenue(winRunners[0].MenuHint)
 		}
 
 		// Merge WIN and PLACE for each horse
@@ -320,6 +323,16 @@ func (bs *BetfairStitcher) extractTime(eventDt string) string {
 	return ""
 }
 
+// extractVenue extracts venue from menu_hint: "Ascot 15th Oct" → "Ascot"
+func (bs *BetfairStitcher) extractVenue(menuHint string) string {
+	venue := strings.TrimSpace(menuHint)
+	// Find first digit (start of date part)
+	if idx := strings.IndexAny(venue, "0123456789"); idx > 0 {
+		venue = strings.TrimSpace(venue[:idx])
+	}
+	return venue
+}
+
 // saveStitchedRace saves a stitched race to CSV
 func (bs *BetfairStitcher) saveStitchedRace(race StitchedRace, region string) error {
 	// Determine race type from event name
@@ -347,7 +360,7 @@ func (bs *BetfairStitcher) saveStitchedRace(race StitchedRace, region string) er
 
 	// Header
 	header := []string{
-		"date", "off", "event_name", "horse",
+		"date", "off", "event_name", "venue", "horse",
 		"win_bsp", "win_ppwap", "win_morningwap", "win_ppmax", "win_ppmin",
 		"win_ipmax", "win_ipmin", "win_morning_vol", "win_pre_vol", "win_ip_vol", "win_lose",
 		"place_bsp", "place_ppwap", "place_morningwap", "place_ppmax", "place_ppmin",
@@ -358,7 +371,7 @@ func (bs *BetfairStitcher) saveStitchedRace(race StitchedRace, region string) er
 	// Data rows
 	for _, runner := range race.Runners {
 		row := []string{
-			race.Date, race.OffTime, race.EventName, runner.Horse,
+			race.Date, race.OffTime, race.EventName, race.Venue, runner.Horse,
 			runner.WinBSP, runner.WinPPWAP, runner.WinMorningWAP, runner.WinPPMax, runner.WinPPMin,
 			runner.WinIPMax, runner.WinIPMin, runner.WinMorningVol, runner.WinPreVol, runner.WinIPVol, runner.WinLose,
 			runner.PlaceBSP, runner.PlacePPWAP, runner.PlaceMorningWAP, runner.PlacePPMax, runner.PlacePPMin,
@@ -443,7 +456,14 @@ func (bs *BetfairStitcher) readStitchedCSV(filePath string) (StitchedRace, error
 
 	// Parse data rows (skip header)
 	for i, record := range records {
-		if i == 0 || len(record) < 26 {
+		// Support both old format (26 cols) and new format (27 cols with venue)
+		hasVenue := len(record) >= 27
+		minCols := 26
+		if hasVenue {
+			minCols = 27
+		}
+		
+		if i == 0 || len(record) < minCols {
 			continue
 		}
 
@@ -452,32 +472,41 @@ func (bs *BetfairStitcher) readStitchedCSV(filePath string) (StitchedRace, error
 			race.Date = record[0]
 			race.OffTime = record[1]
 			race.EventName = record[2]
+			if hasVenue {
+				race.Venue = record[3]
+			}
+		}
+
+		// Adjust indices based on whether venue column exists
+		horseIdx := 3
+		if hasVenue {
+			horseIdx = 4
 		}
 
 		runner := StitchedRunner{
-			Horse:           record[3],
-			WinBSP:          record[4],
-			WinPPWAP:        record[5],
-			WinMorningWAP:   record[6],
-			WinPPMax:        record[7],
-			WinPPMin:        record[8],
-			WinIPMax:        record[9],
-			WinIPMin:        record[10],
-			WinMorningVol:   record[11],
-			WinPreVol:       record[12],
-			WinIPVol:        record[13],
-			WinLose:         record[14],
-			PlaceBSP:        record[15],
-			PlacePPWAP:      record[16],
-			PlaceMorningWAP: record[17],
-			PlacePPMax:      record[18],
-			PlacePPMin:      record[19],
-			PlaceIPMax:      record[20],
-			PlaceIPMin:      record[21],
-			PlaceMorningVol: record[22],
-			PlacePreVol:     record[23],
-			PlaceIPVol:      record[24],
-			PlaceWinLose:    record[25],
+			Horse:           record[horseIdx],
+			WinBSP:          record[horseIdx+1],
+			WinPPWAP:        record[horseIdx+2],
+			WinMorningWAP:   record[horseIdx+3],
+			WinPPMax:        record[horseIdx+4],
+			WinPPMin:        record[horseIdx+5],
+			WinIPMax:        record[horseIdx+6],
+			WinIPMin:        record[horseIdx+7],
+			WinMorningVol:   record[horseIdx+8],
+			WinPreVol:       record[horseIdx+9],
+			WinIPVol:        record[horseIdx+10],
+			WinLose:         record[horseIdx+11],
+			PlaceBSP:        record[horseIdx+12],
+			PlacePPWAP:      record[horseIdx+13],
+			PlaceMorningWAP: record[horseIdx+14],
+			PlacePPMax:      record[horseIdx+15],
+			PlacePPMin:      record[horseIdx+16],
+			PlaceIPMax:      record[horseIdx+17],
+			PlaceIPMin:      record[horseIdx+18],
+			PlaceMorningVol: record[horseIdx+19],
+			PlacePreVol:     record[horseIdx+20],
+			PlaceIPVol:      record[horseIdx+21],
+			PlaceWinLose:    record[horseIdx+22],
 		}
 
 		race.Runners = append(race.Runners, runner)

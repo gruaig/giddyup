@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"unicode"
@@ -99,4 +100,39 @@ func CleanRaceName(raceName string) string {
 	name = strings.ReplaceAll(name, "(Listed)", "")
 
 	return CleanString(name)
+}
+
+// TimeVariants generates time variants with ±1 minute tolerance
+func TimeVariants(hhmm string) []string {
+	if len(hhmm) != 5 || hhmm[2] != ':' {
+		return []string{hhmm}
+	}
+
+	h := (int(hhmm[0]-'0')*10 + int(hhmm[1]-'0'))
+	m := (int(hhmm[3]-'0')*10 + int(hhmm[4]-'0'))
+
+	var variants []string
+
+	// Original time
+	variants = append(variants, hhmm)
+
+	// Minus 1 minute
+	m1 := m - 1
+	h1 := h
+	if m1 < 0 {
+		m1 = 59
+		h1 = (h + 23) % 24
+	}
+	variants = append(variants, fmt.Sprintf("%02d:%02d", h1, m1))
+
+	// Plus 1 minute
+	m2 := m + 1
+	h2 := h
+	if m2 > 59 {
+		m2 = 0
+		h2 = (h + 1) % 24
+	}
+	variants = append(variants, fmt.Sprintf("%02d:%02d", h2, m2))
+
+	return variants
 }
