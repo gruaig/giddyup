@@ -51,9 +51,12 @@ type SLRaceResponse struct {
 		RideReference struct {
 			ID int `json:"id"`
 		} `json:"ride_reference"`
-		ClothNumber interface{} `json:"cloth_number"` // Can be string or int
-		Stall       int         `json:"stall"`
-		Horse       struct {
+		ClothNumber    interface{} `json:"cloth_number"` // Can be string or int
+		Stall          int         `json:"stall"`
+		FinishPosition int         `json:"finish_position"` // Position (0 if not finished)
+		FinishDistance string      `json:"finish_distance"` // Distance beaten
+		RideStatus     string      `json:"ride_status"`     // "RUNNER" or "NONRUNNER"
+		Horse          struct {
 			HorseReference struct {
 				ID int `json:"id"`
 			} `json:"horse_reference"`

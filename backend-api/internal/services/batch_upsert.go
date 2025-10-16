@@ -3,15 +3,16 @@ package services
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/lib/pq"
 )
 
-// upsertNamesAndFetchIDs performs batch upsert for single-column entity tables
+// UpsertNamesAndFetchIDs performs batch upsert for single-column entity tables
 // Returns map[name]id for all provided names
 // This replaces N individual INSERT+SELECT queries with 3 total queries
-func upsertNamesAndFetchIDs(tx *sql.Tx, table, idCol, nameCol, uniqConstraint string, names []string) (map[string]int64, error) {
+func UpsertNamesAndFetchIDs(tx *sql.Tx, table, idCol, nameCol, uniqConstraint string, names []string) (map[string]int64, error) {
 	if len(names) == 0 {
 		return map[string]int64{}, nil
 	}
@@ -63,7 +64,7 @@ func upsertNamesAndFetchIDs(tx *sql.Tx, table, idCol, nameCol, uniqConstraint st
 		return nil, fmt.Errorf("insert %s: %w", table, err)
 	}
 
-	// 4) SELECT all IDs using normalized join (single query)
+	// 4) SELECT all IDs using normalized join (accepts slight name variations)
 	selSQL := fmt.Sprintf(`
 		SELECT t.%s, t.%s
 		FROM racing.%s t
@@ -91,7 +92,7 @@ func upsertNamesAndFetchIDs(tx *sql.Tx, table, idCol, nameCol, uniqConstraint st
 }
 
 // upsertCoursesAndFetchIDs performs batch upsert for courses (two columns: name + region)
-func upsertCoursesAndFetchIDs(tx *sql.Tx, courses map[string]string) (map[string]int64, error) {
+func UpsertCoursesAndFetchIDs(tx *sql.Tx, courses map[string]string) (map[string]int64, error) {
 	if len(courses) == 0 {
 		return map[string]int64{}, nil
 	}
@@ -162,6 +163,15 @@ func upsertCoursesAndFetchIDs(tx *sql.Tx, courses map[string]string) (map[string
 		out[strings.TrimSpace(nm)] = id
 	}
 
+	// DEBUG: Log any courses that failed to match
+	if len(out) < len(courses) {
+		for courseName := range courses {
+			if _, found := out[strings.TrimSpace(courseName)]; !found {
+				log.Printf("⚠️  [CourseMatch] FAILED to find course_id for: '%s' (region: %s)",
+					courseName, courses[courseName])
+			}
+		}
+	}
+
 	return out, rows.Err()
 }
-

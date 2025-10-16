@@ -186,7 +186,7 @@ func (s *AutoUpdateService) backfillRacecards(dateStr string, forceRefresh bool)
 		ctx := context.Background()
 		tx, _ := s.db.BeginTx(ctx, nil)
 		tx.Exec("DELETE FROM racing.runners WHERE race_id IN (SELECT race_id FROM racing.races WHERE race_date = $1)", dateStr)
-		tx.Exec("DELETE FROM racing.races WHERE race_date = $1)", dateStr)
+		tx.Exec("DELETE FROM racing.races WHERE race_date = $1", dateStr) // Fixed: removed extra )
 		tx.Commit()
 	}
 
@@ -366,19 +366,19 @@ func (s *AutoUpdateService) insertToDatabase(dateStr string, races []scraper.Rac
 
 	// STEP 1 & 2: Batch upsert dimensions and get IDs back (optimized!)
 	log.Printf("[AutoUpdate]      📊 Upserting dimension tables (courses, horses, jockeys, trainers, owners)...")
-	
+
 	// Set performance knobs for this transaction
 	tx.Exec(`SET LOCAL synchronous_commit = off`) // Safe for batch ETL
 	tx.Exec(`SET LOCAL statement_timeout = 0`)
-	
+
 	courseIDs, horseIDs, trainerIDs, jockeyIDs, ownerIDs, err := s.batchUpsertDimensions(tx, races)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to batch upsert dimensions: %w", err)
 	}
-	
+
 	log.Printf("[AutoUpdate]      ✓ Upserted %d courses, %d horses, %d trainers, %d jockeys, %d owners",
 		len(courseIDs), len(horseIDs), len(trainerIDs), len(jockeyIDs), len(ownerIDs))
-	
+
 	// Populate foreign keys using the returned ID maps (no extra queries!)
 	s.populateForeignKeysFromMaps(courseIDs, horseIDs, trainerIDs, jockeyIDs, ownerIDs, races)
 
@@ -650,7 +650,7 @@ func nullFloat64BSP(f float64) interface{} {
 // Replaces ~5,000 individual queries with ~15 batch queries (300x faster!)
 func (s *AutoUpdateService) batchUpsertDimensions(tx *sql.Tx, races []scraper.Race) (
 	map[string]int64, map[string]int64, map[string]int64, map[string]int64, map[string]int64, error) {
-	
+
 	// Collect unique entities
 	courses := make(map[string]string) // name -> region
 	horseSet := make(map[string]struct{})
@@ -688,27 +688,27 @@ func (s *AutoUpdateService) batchUpsertDimensions(tx *sql.Tx, races []scraper.Ra
 	}
 
 	// Batch upsert all entities (3 queries each instead of N*2)
-	courseIDs, err := upsertCoursesAndFetchIDs(tx, courses)
+	courseIDs, err := UpsertCoursesAndFetchIDs(tx, courses)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
-	horseIDs, err := upsertNamesAndFetchIDs(tx, "horses", "horse_id", "horse_name", "horses_uniq", toSlice(horseSet))
+	horseIDs, err := UpsertNamesAndFetchIDs(tx, "horses", "horse_id", "horse_name", "horses_uniq", toSlice(horseSet))
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
-	trainerIDs, err := upsertNamesAndFetchIDs(tx, "trainers", "trainer_id", "trainer_name", "trainers_uniq", toSlice(trainerSet))
+	trainerIDs, err := UpsertNamesAndFetchIDs(tx, "trainers", "trainer_id", "trainer_name", "trainers_uniq", toSlice(trainerSet))
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
-	jockeyIDs, err := upsertNamesAndFetchIDs(tx, "jockeys", "jockey_id", "jockey_name", "jockeys_uniq", toSlice(jockeySet))
+	jockeyIDs, err := UpsertNamesAndFetchIDs(tx, "jockeys", "jockey_id", "jockey_name", "jockeys_uniq", toSlice(jockeySet))
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
-	ownerIDs, err := upsertNamesAndFetchIDs(tx, "owners", "owner_id", "owner_name", "owners_uniq", toSlice(ownerSet))
+	ownerIDs, err := UpsertNamesAndFetchIDs(tx, "owners", "owner_id", "owner_name", "owners_uniq", toSlice(ownerSet))
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
@@ -817,7 +817,7 @@ func (s *AutoUpdateService) upsertDimensionsOld(tx *sql.Tx, races []scraper.Race
 func (s *AutoUpdateService) populateForeignKeysFromMaps(
 	courseIDs, horseIDs, trainerIDs, jockeyIDs, ownerIDs map[string]int64,
 	races []scraper.Race) {
-	
+
 	for i := range races {
 		// Populate course_id
 		if id, ok := courseIDs[strings.TrimSpace(races[i].Course)]; ok {
@@ -827,7 +827,7 @@ func (s *AutoUpdateService) populateForeignKeysFromMaps(
 		// Populate runner foreign keys
 		for j := range races[i].Runners {
 			runner := &races[i].Runners[j]
-			
+
 			if id, ok := horseIDs[strings.TrimSpace(runner.Horse)]; ok {
 				runner.HorseID = int(id)
 			}

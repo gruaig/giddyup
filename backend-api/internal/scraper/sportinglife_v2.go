@@ -298,9 +298,12 @@ func (s *SportingLifeAPIV2) mergeRunnerData(
 		RideReference struct {
 			ID int `json:"id"`
 		} `json:"ride_reference"`
-		ClothNumber interface{} `json:"cloth_number"` // Can be string or int
-		Stall       int         `json:"stall"`
-		Horse       struct {
+		ClothNumber    interface{} `json:"cloth_number"` // Can be string or int
+		Stall          int         `json:"stall"`
+		FinishPosition int         `json:"finish_position"` // Position in race
+		FinishDistance string      `json:"finish_distance"` // Distance beaten
+		RideStatus     string      `json:"ride_status"`     // "RUNNER" or "NONRUNNER"
+		Horse          struct {
 			HorseReference struct {
 				ID int `json:"id"`
 			} `json:"horse_reference"`
@@ -454,6 +457,14 @@ func (s *SportingLifeAPIV2) mergeRunnerData(
 				lbs, _ := strconv.Atoi(parts[1])
 				runner.Lbs = st*14 + lbs
 			}
+		}
+
+		// Extract position and distance beaten (for finished races)
+		if rRide.FinishPosition > 0 {
+			runner.Pos = strconv.Itoa(rRide.FinishPosition)
+		}
+		if rRide.FinishDistance != "" {
+			runner.Comment = rRide.FinishDistance // Store BTN in comment for now
 		}
 
 		// Merge betting data

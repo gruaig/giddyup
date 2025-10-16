@@ -59,6 +59,46 @@ Quick reference for all available commands.
 
 ---
 
+## fetch_all_betfair
+
+**Standalone command to fetch LIVE Betfair prices for a specific date using API-NG**
+
+```bash
+./fetch_all_betfair <date>
+
+# Examples
+./fetch_all_betfair 2025-10-16
+./fetch_all_betfair $(date +%Y-%m-%d)  # today
+```
+
+**Prerequisites:**
+- Race data must exist (run `fetch_all` first)
+- Betfair credentials in environment (`settings.env`)
+- Only works for active races (before off_time + 30 minutes)
+
+**What it does:**
+1. Loads races from database for specified date
+2. Discovers Betfair WIN markets using API-NG
+3. Matches races to markets (by course, time, region)
+4. Fetches live prices in batches (back, lay, VWAP)
+5. Inserts into `racing.live_prices` table
+6. Mirrors latest prices to `racing.runners` table
+
+**Uses same technology as:**
+- Automatic live price service (`internal/services/liveprices.go`)
+- Same API calls, same matching logic, same database schema
+- Runs once on-demand instead of continuously every 60 seconds
+
+**Use cases:**
+- Manual price refresh for a specific date
+- Backfill live prices outside auto-update schedule
+- Testing Betfair integration without running full server
+- Debugging market matching
+
+See `cmd/fetch_all_betfair/README.md` for detailed documentation.
+
+---
+
 ## 🔧 Utility Commands
 
 ### Build All Binaries
@@ -68,6 +108,9 @@ go build -o bin/api cmd/api/main.go
 
 # fetch_all
 go build -o bin/fetch_all cmd/fetch_all/main.go
+
+# fetch_all_betfair
+go build -o bin/fetch_all_betfair cmd/fetch_all_betfair/main.go
 
 # backfill_dates
 go build -o bin/backfill_dates cmd/backfill_dates/main.go

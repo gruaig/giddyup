@@ -1,0 +1,69 @@
+=== RUN   TestDataCompleteness
+=== RUN   TestDataCompleteness/Date_2025-10-10
+    comprehensive_test.go:73: ✅ 2025-10-10: 39 races, 468 runners
+=== RUN   TestDataCompleteness/Date_2025-10-11
+    comprehensive_test.go:73: ✅ 2025-10-11: 51 races, 565 runners
+=== RUN   TestDataCompleteness/Date_2025-10-12
+    comprehensive_test.go:73: ✅ 2025-10-12: 30 races, 334 runners
+=== RUN   TestDataCompleteness/Date_2025-10-13
+    comprehensive_test.go:73: ✅ 2025-10-13: 30 races, 295 runners
+=== RUN   TestDataCompleteness/Date_2025-10-14
+    comprehensive_test.go:73: ✅ 2025-10-14: 46 races, 497 runners
+=== RUN   TestDataCompleteness/Date_2025-10-15
+    comprehensive_test.go:73: ✅ 2025-10-15: 36 races, 337 runners
+=== RUN   TestDataCompleteness/Date_2025-10-16
+    comprehensive_test.go:73: ✅ 2025-10-16: 53 races, 523 runners
+=== RUN   TestDataCompleteness/Date_2025-10-17
+    comprehensive_test.go:73: ✅ 2025-10-17: 44 races, 403 runners
+--- PASS: TestDataCompleteness (0.02s)
+    --- PASS: TestDataCompleteness/Date_2025-10-10 (0.02s)
+    --- PASS: TestDataCompleteness/Date_2025-10-11 (0.00s)
+    --- PASS: TestDataCompleteness/Date_2025-10-12 (0.00s)
+    --- PASS: TestDataCompleteness/Date_2025-10-13 (0.00s)
+    --- PASS: TestDataCompleteness/Date_2025-10-14 (0.00s)
+    --- PASS: TestDataCompleteness/Date_2025-10-15 (0.00s)
+    --- PASS: TestDataCompleteness/Date_2025-10-16 (0.00s)
+    --- PASS: TestDataCompleteness/Date_2025-10-17 (0.00s)
+=== RUN   TestNoDuplicates
+    comprehensive_test.go:99: ✅ No duplicate races
+    comprehensive_test.go:121: ✅ No duplicate runners
+--- PASS: TestNoDuplicates (0.01s)
+=== RUN   TestForeignKeysPopulated
+    comprehensive_test.go:153: ✅ Trainers: 100.0% populated
+    comprehensive_test.go:154: ✅ Jockeys: 100.0% populated
+--- PASS: TestForeignKeysPopulated (0.00s)
+=== RUN   TestMarketStatus
+    comprehensive_test.go:178: ✅ Market Status: 278 Finished, 3 Active, 48 Upcoming
+--- PASS: TestMarketStatus (0.00s)
+=== RUN   TestAPIHealth
+    comprehensive_test.go:217: ✅ API health check passed
+--- PASS: TestAPIHealth (0.00s)
+=== RUN   TestAPIMeetings
+    comprehensive_test.go:244: ✅ Meetings endpoint returned 7 meetings
+--- PASS: TestAPIMeetings (0.00s)
+=== RUN   TestRacesHaveRunners
+    comprehensive_test.go:267: ✅ All races have runners
+--- PASS: TestRacesHaveRunners (0.64s)
+=== RUN   TestRaceCountsMatch
+    comprehensive_test.go:290: ⚠️  Race 1: expected 10 runners, has 11
+    comprehensive_test.go:290: ⚠️  Race 4: expected 10 runners, has 11
+    comprehensive_test.go:290: ⚠️  Race 7: expected 9 runners, has 10
+    comprehensive_test.go:290: ⚠️  Race 9: expected 14 runners, has 15
+    comprehensive_test.go:290: ⚠️  Race 12: expected 11 runners, has 12
+    comprehensive_test.go:290: ⚠️  Race 13: expected 18 runners, has 20
+    comprehensive_test.go:290: ⚠️  Race 14: expected 21 runners, has 22
+    comprehensive_test.go:290: ⚠️  Race 16: expected 14 runners, has 15
+    comprehensive_test.go:290: ⚠️  Race 17: expected 7 runners, has 8
+    comprehensive_test.go:290: ⚠️  Race 18: expected 7 runners, has 9
+    comprehensive_test.go:295: ℹ️  10 races have runner count mismatches (may be due to non-runners)
+--- PASS: TestRaceCountsMatch (0.09s)
+=== RUN   TestPositionsExtracted
+    comprehensive_test.go:320: Only 0.0% of Oct 10 runners have positions (expected >50%)
+    comprehensive_test.go:323: ✅ Positions: 0.0% populated for Oct 10
+--- FAIL: TestPositionsExtracted (0.00s)
+=== RUN   TestNoNullRaceIDs
+    comprehensive_test.go:343: ✅ All runners have valid race_id
+--- PASS: TestNoNullRaceIDs (0.00s)
+FAIL
+FAIL	command-line-arguments	0.778s
+FAIL

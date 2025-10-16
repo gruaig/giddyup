@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/md5"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"giddyup/api/internal/scraper"
+	"giddyup/api/internal/services"
 
 	_ "github.com/lib/pq"
 )
@@ -158,19 +160,30 @@ func insertToDatabase(db *sql.DB, dateStr string, races []scraper.Race) (int, in
 	tx.Exec(`SET LOCAL synchronous_commit = off`) // Safe for batch ETL
 	tx.Exec(`SET LOCAL statement_timeout = 0`)
 
-	// Batch upsert dimension tables (optimized!)
-	log.Println("   • Batch upserting courses, horses, jockeys, trainers, owners...")
-	courseIDs, horseIDs, trainerIDs, jockeyIDs, ownerIDs, err := batchUpsertDimensions(tx, races)
-	if err != nil {
-		return 0, 0, fmt.Errorf("batch upsert dimensions: %w", err)
+	// Use OLD method (individual queries) - batch upsert has bugs with name matching
+	log.Println("   • Upserting dimensions...")
+	if err := upsertDimensionsOLD(tx, races); err != nil {
+		return 0, 0, fmt.Errorf("upsert dimensions: %w", err)
 	}
-	
-	log.Printf("   • Got IDs: %d courses, %d horses, %d trainers, %d jockeys, %d owners",
-		len(courseIDs), len(horseIDs), len(trainerIDs), len(jockeyIDs), len(ownerIDs))
-	
-	// Populate foreign keys using the returned ID maps (no extra queries!)
-	log.Println("   • Populating foreign keys from ID maps...")
-	populateForeignKeysFromMaps(courseIDs, horseIDs, trainerIDs, jockeyIDs, ownerIDs, races)
+
+	// Populate foreign keys
+	log.Println("   • Populating foreign keys...")
+	if err := populateForeignKeysOLD(tx, races); err != nil {
+		return 0, 0, fmt.Errorf("populate foreign keys: %w", err)
+	}
+
+	// Count populated
+	horsesPopulated := 0
+	totalRunners := 0
+	for _, race := range races {
+		totalRunners += len(race.Runners)
+		for _, runner := range race.Runners {
+			if runner.HorseID > 0 {
+				horsesPopulated++
+			}
+		}
+	}
+	log.Printf("   • Populated foreign keys for %d/%d runners", horsesPopulated, totalRunners)
 
 	// Insert races and runners
 	raceCount := 0
@@ -264,7 +277,7 @@ func insertToDatabase(db *sql.DB, dateStr string, races []scraper.Race) (int, in
 
 func batchUpsertDimensions(tx *sql.Tx, races []scraper.Race) (
 	map[string]int64, map[string]int64, map[string]int64, map[string]int64, map[string]int64, error) {
-	
+
 	// Collect unique entities
 	courses := make(map[string]string)
 	horseSet := make(map[string]struct{})
@@ -301,27 +314,27 @@ func batchUpsertDimensions(tx *sql.Tx, races []scraper.Race) (
 	}
 
 	// Use the shared batch upsert functions from services package
-	courseIDs, err := upsertCoursesAndFetchIDs(tx, courses)
+	courseIDs, err := services.UpsertCoursesAndFetchIDs(tx, courses)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
-	horseIDs, err := upsertNamesAndFetchIDs(tx, "horses", "horse_id", "horse_name", "horses_uniq", toSlice(horseSet))
+	horseIDs, err := services.UpsertNamesAndFetchIDs(tx, "horses", "horse_id", "horse_name", "horses_uniq", toSlice(horseSet))
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
-	trainerIDs, err := upsertNamesAndFetchIDs(tx, "trainers", "trainer_id", "trainer_name", "trainers_uniq", toSlice(trainerSet))
+	trainerIDs, err := services.UpsertNamesAndFetchIDs(tx, "trainers", "trainer_id", "trainer_name", "trainers_uniq", toSlice(trainerSet))
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
-	jockeyIDs, err := upsertNamesAndFetchIDs(tx, "jockeys", "jockey_id", "jockey_name", "jockeys_uniq", toSlice(jockeySet))
+	jockeyIDs, err := services.UpsertNamesAndFetchIDs(tx, "jockeys", "jockey_id", "jockey_name", "jockeys_uniq", toSlice(jockeySet))
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
-	ownerIDs, err := upsertNamesAndFetchIDs(tx, "owners", "owner_id", "owner_name", "owners_uniq", toSlice(ownerSet))
+	ownerIDs, err := services.UpsertNamesAndFetchIDs(tx, "owners", "owner_id", "owner_name", "owners_uniq", toSlice(ownerSet))
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
@@ -398,7 +411,7 @@ func upsertDimensionsOLD(tx *sql.Tx, races []scraper.Race) error {
 func populateForeignKeysFromMaps(
 	courseIDs, horseIDs, trainerIDs, jockeyIDs, ownerIDs map[string]int64,
 	races []scraper.Race) {
-	
+
 	for i := range races {
 		if id, ok := courseIDs[strings.TrimSpace(races[i].Course)]; ok {
 			races[i].CourseID = int(id)
@@ -406,7 +419,7 @@ func populateForeignKeysFromMaps(
 
 		for j := range races[i].Runners {
 			runner := &races[i].Runners[j]
-			
+
 			if id, ok := horseIDs[strings.TrimSpace(runner.Horse)]; ok {
 				runner.HorseID = int(id)
 			}
@@ -478,8 +491,21 @@ func populateForeignKeysOLD(tx *sql.Tx, races []scraper.Race) error {
 	return nil
 }
 
+// generateRaceKey creates a unique key for a race for idempotency
+// MUST match the implementation in autoupdate.go to avoid duplicates!
 func generateRaceKey(race scraper.Race) string {
-	return fmt.Sprintf("%s|%s|%s|%s", race.Date, scraper.NormalizeName(race.Course), race.OffTime, scraper.NormalizeName(race.RaceName))
+	normCourse := strings.ToLower(strings.TrimSpace(race.Course))
+	normTime := race.OffTime
+	if len(normTime) >= 5 {
+		normTime = normTime[:5] // Strip seconds: "12:35:00" → "12:35"
+	}
+	normName := strings.ToLower(strings.TrimSpace(race.RaceName))
+	normType := strings.ToLower(strings.TrimSpace(race.Type))
+	normRegion := strings.ToUpper(strings.TrimSpace(race.Region))
+
+	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s", race.Date, normRegion, normCourse, normTime, normName, normType)
+	hash := md5.Sum([]byte(data))
+	return fmt.Sprintf("%x", hash)
 }
 
 func generateRunnerKey(raceKey string, runner scraper.Runner) string {

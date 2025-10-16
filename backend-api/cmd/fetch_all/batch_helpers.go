@@ -163,4 +163,3 @@ func upsertCoursesAndFetchIDs(tx *sql.Tx, courses map[string]string) (map[string
 
 	return out, rows.Err()
 }
-

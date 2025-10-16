@@ -1,0 +1,15 @@
+#!/bin/bash
+echo "Testing API endpoints..."
+echo ""
+echo "Health:"
+curl -s http://localhost:8001/health
+echo ""
+echo ""
+echo "Today's races count:"
+curl -s http://localhost:8001/api/v1/races/today | python3 -c "import sys, json; d=json.load(sys.stdin); print(f'  Races: {len(d)}')" 2>/dev/null || echo "  ERROR"
+echo ""
+echo "Tomorrow's races count:"
+curl -s http://localhost:8001/api/v1/races/tomorrow | python3 -c "import sys, json; d=json.load(sys.stdin); print(f'  Races: {len(d)}')" 2>/dev/null || echo "  ERROR"
+echo ""
+echo "Specific date (2025-10-17):"
+curl -s "http://localhost:8001/api/v1/races?date=2025-10-17" | python3 -c "import sys, json; d=json.load(sys.stdin); print(f'  Races: {len(d)}')" 2>/dev/null || echo "  ERROR"
