@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -334,30 +333,10 @@ func (bs *BetfairStitcher) extractVenue(menuHint string) string {
 	return venue
 }
 
-// convertBetfairTimeToLocal converts Betfair time to match Sporting Life
-// Betfair CSV times appear to be 1 hour ahead - subtract 1 hour
+// convertBetfairTimeToLocal converts Betfair event_dt (UTC) to UK local time
+// Uses proper timezone conversion (Europe/London) - handles BST/GMT automatically
 func (bs *BetfairStitcher) convertBetfairTimeToLocal(eventDt string) string {
-	// Extract time from event_dt  
-	hhmmBF := bs.extractTime(eventDt)
-	
-	// Parse time
-	if len(hhmmBF) != 5 || hhmmBF[2] != ':' {
-		return hhmmBF // Can't parse, return as-is
-	}
-	
-	h, err1 := strconv.Atoi(hhmmBF[:2])
-	m, err2 := strconv.Atoi(hhmmBF[3:5])
-	if err1 != nil || err2 != nil {
-		return hhmmBF
-	}
-	
-	// Subtract 1 hour (Betfair seems to be ahead by 1 hour)
-	h = h - 1
-	if h < 0 {
-		h = 23
-	}
-	
-	return fmt.Sprintf("%02d:%02d", h, m)
+	return ParseBetfairTimeToLocal(eventDt)
 }
 
 // saveStitchedRace saves a stitched race to CSV

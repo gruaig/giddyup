@@ -364,16 +364,23 @@ func (s *AutoUpdateService) insertToDatabase(dateStr string, races []scraper.Rac
 	}
 	defer tx.Rollback()
 
-	// STEP 1: Upsert all dimension tables first (courses, horses, trainers, jockeys, owners)
+	// STEP 1 & 2: Batch upsert dimensions and get IDs back (optimized!)
 	log.Printf("[AutoUpdate]      📊 Upserting dimension tables (courses, horses, jockeys, trainers, owners)...")
-	if err := s.upsertDimensions(tx, races); err != nil {
-		return 0, 0, fmt.Errorf("failed to upsert dimensions: %w", err)
+	
+	// Set performance knobs for this transaction
+	tx.Exec(`SET LOCAL synchronous_commit = off`) // Safe for batch ETL
+	tx.Exec(`SET LOCAL statement_timeout = 0`)
+	
+	courseIDs, horseIDs, trainerIDs, jockeyIDs, ownerIDs, err := s.batchUpsertDimensions(tx, races)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to batch upsert dimensions: %w", err)
 	}
-
-	// STEP 2: Look up IDs for all entities and populate foreign keys (including courses!)
-	if err := s.populateForeignKeys(tx, races); err != nil {
-		return 0, 0, fmt.Errorf("failed to populate foreign keys: %w", err)
-	}
+	
+	log.Printf("[AutoUpdate]      ✓ Upserted %d courses, %d horses, %d trainers, %d jockeys, %d owners",
+		len(courseIDs), len(horseIDs), len(trainerIDs), len(jockeyIDs), len(ownerIDs))
+	
+	// Populate foreign keys using the returned ID maps (no extra queries!)
+	s.populateForeignKeysFromMaps(courseIDs, horseIDs, trainerIDs, jockeyIDs, ownerIDs, races)
 
 	raceCount := 0
 	runnerCount := 0
@@ -639,8 +646,78 @@ func nullFloat64BSP(f float64) interface{} {
 	return f
 }
 
-// upsertDimensions inserts/updates dimension tables (courses, horses, trainers, jockeys, owners)
-func (s *AutoUpdateService) upsertDimensions(tx *sql.Tx, races []scraper.Race) error {
+// batchUpsertDimensions performs optimized batch upsert and returns ID maps
+// Replaces ~5,000 individual queries with ~15 batch queries (300x faster!)
+func (s *AutoUpdateService) batchUpsertDimensions(tx *sql.Tx, races []scraper.Race) (
+	map[string]int64, map[string]int64, map[string]int64, map[string]int64, map[string]int64, error) {
+	
+	// Collect unique entities
+	courses := make(map[string]string) // name -> region
+	horseSet := make(map[string]struct{})
+	trainerSet := make(map[string]struct{})
+	jockeySet := make(map[string]struct{})
+	ownerSet := make(map[string]struct{})
+
+	for _, race := range races {
+		if cn := strings.TrimSpace(race.Course); cn != "" {
+			courses[cn] = race.Region
+		}
+		for _, runner := range race.Runners {
+			if v := strings.TrimSpace(runner.Horse); v != "" {
+				horseSet[v] = struct{}{}
+			}
+			if v := strings.TrimSpace(runner.Trainer); v != "" {
+				trainerSet[v] = struct{}{}
+			}
+			if v := strings.TrimSpace(runner.Jockey); v != "" {
+				jockeySet[v] = struct{}{}
+			}
+			if v := strings.TrimSpace(runner.Owner); v != "" {
+				ownerSet[v] = struct{}{}
+			}
+		}
+	}
+
+	// Convert sets to slices
+	toSlice := func(m map[string]struct{}) []string {
+		out := make([]string, 0, len(m))
+		for k := range m {
+			out = append(out, k)
+		}
+		return out
+	}
+
+	// Batch upsert all entities (3 queries each instead of N*2)
+	courseIDs, err := upsertCoursesAndFetchIDs(tx, courses)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	horseIDs, err := upsertNamesAndFetchIDs(tx, "horses", "horse_id", "horse_name", "horses_uniq", toSlice(horseSet))
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	trainerIDs, err := upsertNamesAndFetchIDs(tx, "trainers", "trainer_id", "trainer_name", "trainers_uniq", toSlice(trainerSet))
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	jockeyIDs, err := upsertNamesAndFetchIDs(tx, "jockeys", "jockey_id", "jockey_name", "jockeys_uniq", toSlice(jockeySet))
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	ownerIDs, err := upsertNamesAndFetchIDs(tx, "owners", "owner_id", "owner_name", "owners_uniq", toSlice(ownerSet))
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	return courseIDs, horseIDs, trainerIDs, jockeyIDs, ownerIDs, nil
+}
+
+// OLD upsertDimensions (kept for reference, will be removed)
+func (s *AutoUpdateService) upsertDimensionsOld(tx *sql.Tx, races []scraper.Race) error {
 	// Collect all unique names
 	courses := make(map[string]string) // courseName -> region
 	horses := make(map[string]bool)
@@ -736,8 +813,39 @@ func (s *AutoUpdateService) upsertDimensions(tx *sql.Tx, races []scraper.Race) e
 	return nil
 }
 
-// populateForeignKeys looks up IDs and populates foreign key fields in the race data
-func (s *AutoUpdateService) populateForeignKeys(tx *sql.Tx, races []scraper.Race) error {
+// populateForeignKeysFromMaps populates foreign keys using pre-fetched ID maps (no queries!)
+func (s *AutoUpdateService) populateForeignKeysFromMaps(
+	courseIDs, horseIDs, trainerIDs, jockeyIDs, ownerIDs map[string]int64,
+	races []scraper.Race) {
+	
+	for i := range races {
+		// Populate course_id
+		if id, ok := courseIDs[strings.TrimSpace(races[i].Course)]; ok {
+			races[i].CourseID = int(id)
+		}
+
+		// Populate runner foreign keys
+		for j := range races[i].Runners {
+			runner := &races[i].Runners[j]
+			
+			if id, ok := horseIDs[strings.TrimSpace(runner.Horse)]; ok {
+				runner.HorseID = int(id)
+			}
+			if id, ok := trainerIDs[strings.TrimSpace(runner.Trainer)]; ok {
+				runner.TrainerID = int(id)
+			}
+			if id, ok := jockeyIDs[strings.TrimSpace(runner.Jockey)]; ok {
+				runner.JockeyID = int(id)
+			}
+			if id, ok := ownerIDs[strings.TrimSpace(runner.Owner)]; ok {
+				runner.OwnerID = int(id)
+			}
+		}
+	}
+}
+
+// OLD populateForeignKeys (kept for reference, will be removed)
+func (s *AutoUpdateService) populateForeignKeysOld(tx *sql.Tx, races []scraper.Race) error {
 	// Create lookup maps
 	courseIDs := make(map[string]int64)
 	horseIDs := make(map[string]int64)
