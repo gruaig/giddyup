@@ -66,8 +66,14 @@ type Runner struct {
 	OwnerID   int
 	Owner     string
 	Comment   string
+	Form      string // Form summary (e.g., "1234")
 
-	// Betfair data (populated by stitcher)
+	// Betfair/Bookmaker data
+	BetfairSelectionID int64   // Betfair's selection ID for this runner (for easy matching!)
+	BestOdds           float64 // Best available decimal odds across all bookmakers
+	BestBookmaker      string  // Which bookmaker has best odds
+
+	// Betfair historical data (populated by CSV stitcher)
 	WinBSP          float64
 	WinPPWAP        float64
 	WinMorningWAP   float64

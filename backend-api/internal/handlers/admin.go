@@ -31,12 +31,12 @@ func NewAdminHandler(db *sqlx.DB) *AdminHandler {
 func (h *AdminHandler) ScrapeYesterday(c *gin.Context) {
 	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 
-	// Scrape RP results
-	rpScraper := scraper.NewResultsScraper()
-	rpRaces, err := rpScraper.ScrapeDate(yesterday)
+	// Scrape Sporting Life results
+	slScraper := scraper.NewSportingLifeAPIV2()
+	rpRaces, err := slScraper.GetRacesForDate(yesterday)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to scrape Racing Post",
+			"error":   "Failed to scrape Sporting Life",
 			"details": err.Error(),
 		})
 		return
@@ -89,7 +89,7 @@ func (h *AdminHandler) ScrapeYesterday(c *gin.Context) {
 // convertStitchedToPrices converts stitched races to BetfairPrice format
 func (h *AdminHandler) convertStitchedToPrices(stitchedRaces []scraper.StitchedRace) []scraper.BetfairPrice {
 	prices := []scraper.BetfairPrice{}
-	
+
 	for _, race := range stitchedRaces {
 		for _, runner := range race.Runners {
 			price := scraper.BetfairPrice{
@@ -97,7 +97,7 @@ func (h *AdminHandler) convertStitchedToPrices(stitchedRaces []scraper.StitchedR
 				OffTime: race.OffTime,
 				Horse:   runner.Horse,
 			}
-			
+
 			// Parse WIN prices
 			if val, err := strconv.ParseFloat(runner.WinBSP, 64); err == nil {
 				price.WinBSP = val
@@ -129,7 +129,7 @@ func (h *AdminHandler) convertStitchedToPrices(stitchedRaces []scraper.StitchedR
 			if val, err := strconv.ParseFloat(runner.WinIPVol, 64); err == nil {
 				price.WinIPVol = val
 			}
-			
+
 			// Parse PLACE prices
 			if val, err := strconv.ParseFloat(runner.PlaceBSP, 64); err == nil {
 				price.PlaceBSP = val
@@ -161,11 +161,11 @@ func (h *AdminHandler) convertStitchedToPrices(stitchedRaces []scraper.StitchedR
 			if val, err := strconv.ParseFloat(runner.PlaceIPVol, 64); err == nil {
 				price.PlaceIPVol = val
 			}
-			
+
 			prices = append(prices, price)
 		}
 	}
-	
+
 	return prices
 }
 
@@ -185,12 +185,12 @@ func (h *AdminHandler) ScrapeDate(c *gin.Context) {
 		return
 	}
 
-	// Scrape RP results
-	rpScraper := scraper.NewResultsScraper()
-	rpRaces, err := rpScraper.ScrapeDate(req.Date)
+	// Scrape Sporting Life results
+	slScraper := scraper.NewSportingLifeAPIV2()
+	rpRaces, err := slScraper.GetRacesForDate(req.Date)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to scrape Racing Post",
+			"error":   "Failed to scrape Sporting Life",
 			"details": err.Error(),
 		})
 		return

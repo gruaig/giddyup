@@ -86,17 +86,25 @@ func (m *Matcher) MatchRacesToMarkets(rpRaces []scraper.Race, bfMarkets []Market
 	for _, race := range rpRaces {
 		normCourse := scraper.NormalizeName(race.Course)
 		
+		// Convert off_time to HH:MM format (strip seconds for Betfair matching)
+		offTimeHHMM := race.OffTime
+		if len(strings.Split(offTimeHHMM, ":")) == 3 {
+			// "12:35:00" → "12:35"
+			parts := strings.Split(offTimeHHMM, ":")
+			offTimeHHMM = parts[0] + ":" + parts[1]
+		}
+		
 		// Try exact time match first
-		key := fmt.Sprintf("%s|%s", normCourse, race.OffTime)
+		key := fmt.Sprintf("%s|%s", normCourse, offTimeHHMM)
 		bfMarket, found := bfMap[key]
 		
 		// Try ±1 minute tolerance
 		if !found {
-			bfMarket, found = m.findMarketWithTimeTolerance(bfMap, normCourse, race.OffTime)
+			bfMarket, found = m.findMarketWithTimeTolerance(bfMap, normCourse, offTimeHHMM)
 		}
 
 		if !found {
-			log.Printf("[Matcher] No Betfair market for: %s @ %s", race.Course, race.OffTime)
+			log.Printf("[Matcher] No Betfair market for: %s @ %s", race.Course, offTimeHHMM)
 			continue
 		}
 
@@ -147,8 +155,14 @@ func (m *Matcher) MatchRacesToMarkets(rpRaces []scraper.Race, bfMarkets []Market
 
 // findMarketWithTimeTolerance tries to find a market within ±1 minute
 func (m *Matcher) findMarketWithTimeTolerance(bfMap map[string]MarketCatalogue, venue string, offTime string) (MarketCatalogue, bool) {
-	// Parse HH:MM
-	t, err := time.Parse("15:04", offTime)
+	// Parse HH:MM (or HH:MM:SS)
+	var t time.Time
+	var err error
+	if len(strings.Split(offTime, ":")) == 3 {
+		t, err = time.Parse("15:04:05", offTime)
+	} else {
+		t, err = time.Parse("15:04", offTime)
+	}
 	if err != nil {
 		return MarketCatalogue{}, false
 	}

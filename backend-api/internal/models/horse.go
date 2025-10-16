@@ -32,7 +32,7 @@ type CareerSummary struct {
 // FormEntry represents a single race result in form history
 type FormEntry struct {
 	RaceDate    string   `json:"race_date" db:"race_date"`
-	CourseName  string   `json:"course_name" db:"course_name"`
+	CourseName  *string  `json:"course_name" db:"course_name"`
 	RaceName    string   `json:"race_name" db:"race_name"`
 	RaceType    string   `json:"race_type" db:"race_type"`
 	Going       *string  `json:"going,omitempty" db:"going"`
