@@ -480,7 +480,10 @@ func (s *AutoUpdateService) insertToDatabase(dateStr string, races []scraper.Rac
 
 func generateRaceKey(race scraper.Race) string {
 	normCourse := strings.ToLower(strings.TrimSpace(race.Course))
-	normTime := normalizeTime(race.OffTime)
+	normTime := race.OffTime
+	if len(normTime) >= 5 {
+		normTime = normTime[:5] // Strip seconds: "12:35:00" → "12:35"
+	}
 	normName := strings.ToLower(strings.TrimSpace(race.RaceName))
 	normType := strings.ToLower(strings.TrimSpace(race.Type))
 	normRegion := strings.ToUpper(strings.TrimSpace(race.Region))
