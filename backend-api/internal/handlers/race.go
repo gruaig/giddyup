@@ -240,3 +240,27 @@ func (h *RaceHandler) GetCourses(c *gin.Context) {
 	logger.Debug("GetCourses: found %d courses", len(courses))
 	c.JSON(http.StatusOK, courses)
 }
+
+// GetTodayMeetings returns today's meetings (convenience endpoint)
+func (h *RaceHandler) GetTodayMeetings(c *gin.Context) {
+	today := time.Now().Format("2006-01-02")
+	
+	// Set date param and call existing GetMeetings logic
+	c.Request.URL.RawQuery = "date=" + today
+	c.Params = append(c.Params, gin.Param{Key: "date", Value: today})
+	
+	// Reuse existing logic
+	h.GetMeetings(c)
+}
+
+// GetTomorrowMeetings returns tomorrow's meetings (convenience endpoint)
+func (h *RaceHandler) GetTomorrowMeetings(c *gin.Context) {
+	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	
+	// Set date param and call existing GetMeetings logic
+	c.Request.URL.RawQuery = "date=" + tomorrow
+	c.Params = append(c.Params, gin.Param{Key: "date", Value: tomorrow})
+	
+	// Reuse existing logic
+	h.GetMeetings(c)
+}
