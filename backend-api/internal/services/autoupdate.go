@@ -176,14 +176,10 @@ func (s *AutoUpdateService) handleTodaysRaces() {
 
 // backfillRacecards fetches and inserts racecards (preliminary data) - FORCE REFRESH for today/tomorrow
 func (s *AutoUpdateService) backfillRacecards(dateStr string, forceRefresh bool) (int, int, error) {
-	// For today/tomorrow, always delete existing data and re-fetch
+	// DON'T delete - just upsert to preserve prices set by live updater
+	// The ON CONFLICT clauses in insertToDatabase will update race metadata without wiping prices
 	if forceRefresh {
-		log.Printf("[AutoUpdate]   🔄 Force refresh enabled - deleting existing data for %s...", dateStr)
-		ctx := context.Background()
-		tx, _ := s.db.BeginTx(ctx, nil)
-		tx.Exec("DELETE FROM racing.runners WHERE race_id IN (SELECT race_id FROM racing.races WHERE race_date = $1)", dateStr)
-		tx.Exec("DELETE FROM racing.races WHERE race_date = $1", dateStr) // Fixed: removed extra )
-		tx.Commit()
+		log.Printf("[AutoUpdate]   🔄 Upserting racecards for %s (preserving prices)...", dateStr)
 	}
 
 	// ALWAYS use Sporting Life API V2 - works for all dates!
@@ -554,12 +550,22 @@ func (s *AutoUpdateService) loadRacesFromDB(dateStr string) ([]scraper.Race, map
 		// Get or create race
 		race, exists := racesMap[raceID]
 		if !exists {
+			// Extract just time part from off_time (PostgreSQL TIME returns "0000-01-01T15:04:05")
+			cleanOffTime := offTime.String
+			if strings.Contains(cleanOffTime, "T") {
+				// Extract time after "T": "0000-01-01T15:04:05" → "15:04:05"
+				parts := strings.Split(cleanOffTime, "T")
+				if len(parts) == 2 {
+					cleanOffTime = parts[1]
+				}
+			}
+
 			race = &scraper.Race{
 				RaceID:   int(raceID),
 				Date:     raceDate,
 				Region:   region,
 				Course:   course,
-				OffTime:  offTime.String,
+				OffTime:  cleanOffTime,
 				RaceName: raceName,
 				Type:     raceType,
 				Class:    class.String,

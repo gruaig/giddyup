@@ -2,6 +2,7 @@ package betfair
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"log"
 	"strings"
@@ -179,17 +180,21 @@ func (m *Matcher) findMarketWithTimeTolerance(bfMap map[string]MarketCatalogue, 
 	return MarketCatalogue{}, false
 }
 
-// Helper to generate race key (duplicate from backfill_dates - consider moving to shared location)
+// Helper to generate race key (MUST match generateRaceKey in autoupdate.go)
 func generateRaceKeyHelper(race scraper.Race) string {
-	// For now, use simplified key - should match what's in database
 	normCourse := strings.ToLower(strings.TrimSpace(race.Course))
 	normTime := race.OffTime
+	if len(normTime) >= 5 {
+		normTime = normTime[:5] // Strip seconds: "12:35:00" → "12:35"
+	}
 	normName := strings.ToLower(strings.TrimSpace(race.RaceName))
 	normType := strings.ToLower(strings.TrimSpace(race.Type))
 	normRegion := strings.ToUpper(strings.TrimSpace(race.Region))
 
-	// Generate simple concatenated key (actual implementation uses MD5 hash)
-	return fmt.Sprintf("%s|%s|%s|%s|%s|%s", race.Date, normRegion, normCourse, normTime, normName, normType)
+	// Generate MD5 hash (MUST match autoupdate.go format!)
+	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s", race.Date, normRegion, normCourse, normTime, normName, normType)
+	hash := md5.Sum([]byte(data))
+	return fmt.Sprintf("%x", hash)
 }
 
 
