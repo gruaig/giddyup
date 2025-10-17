@@ -106,12 +106,8 @@ func (s *AutoUpdateService) RunInBackground() {
 
 // handleTodaysRaces fetches today's racecards and optionally starts live price updates
 func (s *AutoUpdateService) handleTodaysRaces() {
-	// Only run during racing hours (6am - 11pm)
-	currentHour := time.Now().Hour()
-	if currentHour < 6 || currentHour >= 23 {
-		log.Println("[AutoUpdate] Outside racing hours - skipping today's races")
-		return
-	}
+	// Run 24/7 - supports global racing (US races happen late UK time)
+	log.Printf("[AutoUpdate] Running at %s", time.Now().Format("15:04:05 MST"))
 
 	// Fetch TODAY and TOMORROW in parallel for speed
 	today := time.Now().Format("2006-01-02")
