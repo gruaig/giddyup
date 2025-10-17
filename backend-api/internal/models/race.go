@@ -22,6 +22,7 @@ type Race struct {
 	Going      *string  `json:"going,omitempty" db:"going"`
 	Surface    *string  `json:"surface,omitempty" db:"surface"`
 	Ran        int      `json:"ran" db:"ran"`
+	Runners    []Runner `json:"runners,omitempty"` // Populated by GetRacesByMeetings
 }
 
 // RaceWithRunners represents a race with its runners

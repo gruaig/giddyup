@@ -308,6 +308,13 @@ func (r *RaceRepository) GetRacesByMeetings(date string) ([]models.MeetingWithRa
 
 		// Add race to meeting
 		meeting := meetingsMap[courseKey]
+		
+		// Fetch runners for this race
+		runners, err := r.GetRaceRunners(race.RaceID)
+		if err == nil {
+			race.Runners = runners
+		}
+		
 		meeting.Races = append(meeting.Races, race)
 	}
 
