@@ -243,24 +243,44 @@ func (h *RaceHandler) GetCourses(c *gin.Context) {
 
 // GetTodayMeetings returns today's meetings (convenience endpoint)
 func (h *RaceHandler) GetTodayMeetings(c *gin.Context) {
+	start := time.Now()
 	today := time.Now().Format("2006-01-02")
 	
-	// Set date param and call existing GetMeetings logic
-	c.Request.URL.RawQuery = "date=" + today
-	c.Params = append(c.Params, gin.Param{Key: "date", Value: today})
+	logger.Info("→ GetTodayMeetings (calculated: %s) | IP: %s", today, c.ClientIP())
 	
-	// Reuse existing logic
-	h.GetMeetings(c)
+	meetings, err := h.repo.GetRacesByMeetings(today)
+	if err != nil {
+		logger.Error("GetTodayMeetings: repository error: %v | Date: %s", err, today)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get today's meetings",
+		})
+		return
+	}
+	
+	duration := time.Since(start)
+	logger.Info("← GetTodayMeetings: %d meetings for %s | %v", len(meetings), today, duration)
+	
+	c.JSON(http.StatusOK, meetings)
 }
 
 // GetTomorrowMeetings returns tomorrow's meetings (convenience endpoint)
 func (h *RaceHandler) GetTomorrowMeetings(c *gin.Context) {
+	start := time.Now()
 	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
 	
-	// Set date param and call existing GetMeetings logic
-	c.Request.URL.RawQuery = "date=" + tomorrow
-	c.Params = append(c.Params, gin.Param{Key: "date", Value: tomorrow})
+	logger.Info("→ GetTomorrowMeetings (calculated: %s) | IP: %s", tomorrow, c.ClientIP())
 	
-	// Reuse existing logic
-	h.GetMeetings(c)
+	meetings, err := h.repo.GetRacesByMeetings(tomorrow)
+	if err != nil {
+		logger.Error("GetTomorrowMeetings: repository error: %v | Date: %s", err, tomorrow)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get tomorrow's meetings",
+		})
+		return
+	}
+	
+	duration := time.Since(start)
+	logger.Info("← GetTomorrowMeetings: %d meetings for %s | %v", len(meetings), tomorrow, duration)
+	
+	c.JSON(http.StatusOK, meetings)
 }

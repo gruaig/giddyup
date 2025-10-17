@@ -94,7 +94,7 @@ func Setup(db *database.DB, corsOrigins []string) *gin.Engine {
 
 		// Meetings endpoint - races grouped by venue
 		v1.GET("/meetings", raceHandler.GetMeetings)
-		
+
 		// Convenience endpoints for today/tomorrow (auto-calculate dates)
 		v1.GET("/today", raceHandler.GetTodayMeetings)
 		v1.GET("/tomorrow", raceHandler.GetTomorrowMeetings)
