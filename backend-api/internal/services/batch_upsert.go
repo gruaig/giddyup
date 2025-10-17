@@ -65,12 +65,13 @@ func UpsertNamesAndFetchIDs(tx *sql.Tx, table, idCol, nameCol, uniqConstraint st
 	}
 
 	// 4) SELECT all IDs using normalized join (accepts slight name variations)
+	// CRITICAL FIX: Select source name (s.name) first to map the correct key
 	selSQL := fmt.Sprintf(`
-		SELECT t.%s, t.%s
-		FROM racing.%s t
-		JOIN %s s ON racing.norm_text(t.%s) = racing.norm_text(s.name)
-	`, pq.QuoteIdentifier(idCol), pq.QuoteIdentifier(nameCol),
-		pq.QuoteIdentifier(table), pq.QuoteIdentifier(tmp), pq.QuoteIdentifier(nameCol))
+		SELECT s.name, t.%s
+		FROM %s s
+		JOIN racing.%s t ON racing.norm_text(t.%s) = racing.norm_text(s.name)
+	`, pq.QuoteIdentifier(idCol),
+		pq.QuoteIdentifier(tmp), pq.QuoteIdentifier(table), pq.QuoteIdentifier(nameCol))
 
 	rows, err := tx.Query(selSQL)
 	if err != nil {
@@ -80,11 +81,12 @@ func UpsertNamesAndFetchIDs(tx *sql.Tx, table, idCol, nameCol, uniqConstraint st
 
 	out := make(map[string]int64, len(names))
 	for rows.Next() {
-		var id int64
 		var name string
-		if err := rows.Scan(&id, &name); err != nil {
+		var id int64
+		if err := rows.Scan(&name, &id); err != nil {
 			return nil, err
 		}
+		// Map using SOURCE name (from Sporting Life), not DB name
 		out[strings.TrimSpace(name)] = id
 	}
 

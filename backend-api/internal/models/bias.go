@@ -13,6 +13,8 @@ type DrawBiasParams struct {
 type DrawBiasResult struct {
 	Draw        int      `json:"draw" db:"draw"`
 	TotalRuns   int      `json:"total_runs" db:"total_runs"`
+	Wins        int      `json:"wins" db:"wins"`
+	Top3        int      `json:"top3" db:"top3"`
 	WinRate     float64  `json:"win_rate" db:"win_rate"`
 	Top3Rate    float64  `json:"top3_rate" db:"top3_rate"`
 	AvgPosition *float64 `json:"avg_position,omitempty" db:"avg_position"`

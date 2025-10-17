@@ -1,0 +1,76 @@
+ course_id |    course_name     | region 
+-----------+--------------------+--------
+     16591 | Ascot              | GB
+        45 | Ayr                | GB
+     16208 | Bath               | GB
+     16270 | Brighton           | 
+     16286 | Brighton           | GB
+        63 | Carlisle           | GB
+        28 | Catterick          | GB
+        43 | Chelmsford (AW)    | GB
+     16209 | Chelmsford Aw      | IRE
+     16287 | Chelmsford City    | GB
+        46 | Cheltenham         | GB
+     16193 | Chepstow           | GB
+     16216 | Compiegne          | GB
+     16511 | Cork               | IRE
+     16340 | Curragh            | IRE
+     16268 | Curragh            | 
+        38 | Doncaster          | GB
+     16392 | Dundalk            | IRE
+     16218 | Dundalk Aw         | IRE
+        39 | Exeter             | GB
+     16194 | Fairyhouse         | IRE
+     16321 | Fakenham           | GB
+     16337 | Ffos Las           | GB
+     16197 | Goodwood           | GB
+     16324 | Haydock            | GB
+        47 | Hereford           | GB
+     16195 | Hexham             | GB
+        42 | Huntingdon         | GB
+     16217 | Keeneland          | GB
+        53 | Kelso              | GB
+        33 | Kempton (AW)       | GB
+     16219 | Kempton Aw         | IRE
+        44 | Leicester          | GB
+     16593 | Leopardstown       | IRE
+     16595 | Limerick           | IRE
+        31 | Lingfield (AW)     | GB
+        49 | Ludlow             | GB
+        51 | Market Rasen       | GB
+     16200 | Musselburgh        | GB
+     16198 | Naas               | IRE
+        29 | Newcastle (AW)     | GB
+     16206 | Newcastle Aw       | IRE
+       189 | Newmarket          | GB
+       102 | Newton Abbot       | GB
+     16227 | Nottingham         | GB
+     16205 | Nottingham         | 
+     16211 | Ohi                | GB
+        37 | Plumpton           | GB
+       176 | Pontefract         | GB
+     16204 | Punchestown        | 
+     16203 | Punchestown        | IRE
+     16325 | Redcar             | GB
+     16201 | Roscommon          | IRE
+     16212 | Saint Cloud        | GB
+        55 | Sandown            | GB
+        30 | Sedgefield         | GB
+        52 | Southwell (AW)     | GB
+        57 | Stratford          | GB
+        32 | Taunton            | GB
+     16210 | Thurles            | GB
+     16269 | Thurles            | 
+     16334 | Thurles            | IRE
+        61 | Towcester          | GB
+     16213 | Tramore            | GB
+        58 | Uttoxeter          | GB
+        41 | Warwick            | GB
+        34 | Wetherby           | GB
+        40 | Wincanton          | GB
+        48 | Wolverhampton (AW) | GB
+     16224 | Worcester          | GB
+     16566 | Yarmouth           | GB
+     16215 | York               | GB
+(72 rows)
+

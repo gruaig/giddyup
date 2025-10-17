@@ -61,17 +61,19 @@ func (r *BiasRepository) GetDrawBias(params models.DrawBiasParams) ([]models.Dra
 	}
 
 	query += `
-			GROUP BY ru.draw, r.ran, r.going
-		)
-		SELECT 
-			draw,
-			SUM(runs) AS total_runs,
-			ROUND(100.0 * SUM(wins) / NULLIF(SUM(runs), 0), 2) AS win_rate,
-			ROUND(100.0 * SUM(top3) / NULLIF(SUM(runs), 0), 2) AS top3_rate,
-			ROUND(AVG(avg_pos), 2) AS avg_position
-		FROM draw_stats
-		GROUP BY draw
-		ORDER BY draw
+		GROUP BY ru.draw, r.ran, r.going
+	)
+	SELECT 
+		draw,
+		SUM(runs) AS total_runs,
+		SUM(wins)::INT AS wins,
+		SUM(top3)::INT AS top3,
+		ROUND(100.0 * SUM(wins) / NULLIF(SUM(runs), 0), 2) AS win_rate,
+		ROUND(100.0 * SUM(top3) / NULLIF(SUM(runs), 0), 2) AS top3_rate,
+		ROUND(AVG(avg_pos), 2) AS avg_position
+	FROM draw_stats
+	GROUP BY draw
+	ORDER BY draw
 	`
 
 	var results []models.DrawBiasResult

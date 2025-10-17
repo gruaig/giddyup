@@ -191,7 +191,8 @@ func (r *RaceRepository) GetRaceRunners(raceID int64) ([]models.Runner, error) {
 			ru.place_bsp, ru.place_ppwap, ru.place_morningwap, ru.place_ppmax, ru.place_ppmin,
 			ru.place_ipmax, ru.place_ipmin, ru.place_morning_vol, ru.place_pre_vol, ru.place_ip_vol, ru.place_win_lose,
 			bl.sire, bl.dam, bl.damsire,
-			ru.win_flag
+			ru.win_flag,
+			ru.price_updated_at
 		FROM racing.runners ru
 		LEFT JOIN racing.horses h ON h.horse_id = ru.horse_id
 		LEFT JOIN racing.trainers t ON t.trainer_id = ru.trainer_id

@@ -69,4 +69,7 @@ type Runner struct {
 
 	// Generated fields
 	WinFlag bool `json:"win_flag" db:"win_flag"`
+	
+	// Price metadata
+	PriceUpdatedAt *string `json:"price_updated_at,omitempty" db:"price_updated_at"`
 }
