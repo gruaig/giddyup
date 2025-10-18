@@ -276,8 +276,10 @@ func (s *AutoUpdateService) startLivePrices(dateStr string) error {
 		}
 	}
 
-	// Start live prices service
-	livePrices := NewLivePricesService(s.db, bfClient, time.Duration(intervalSecs)*time.Second)
+	// Start live prices service (pass credentials for fresh login each cycle)
+	log.Printf("[AutoUpdate] DEBUG: Passing credentials to LivePrices - appKey: %s, username: %s, password: %s", 
+		appKey, username, maskPassword(password))
+	livePrices := NewLivePricesService(s.db, appKey, username, password, time.Duration(intervalSecs)*time.Second)
 	livePrices.SetMarketMappings(mappings)
 
 	// Run in background goroutine
@@ -632,6 +634,16 @@ func nullInt64(i int) interface{} {
 		return nil
 	}
 	return int64(i)
+}
+
+func maskPassword(password string) string {
+	if len(password) == 0 {
+		return "(empty)"
+	}
+	if len(password) <= 4 {
+		return "****"
+	}
+	return password[:2] + "****" + password[len(password)-2:]
 }
 
 func nullFloat64(f float64) interface{} {

@@ -14,18 +14,20 @@ import (
 // LivePricesService handles fetching and updating live Betfair prices
 type LivePricesService struct {
 	db             *sqlx.DB
-	bfClient       *betfair.Client
-	matcher        *betfair.Matcher
+	appKey         string
+	username       string
+	password       string
 	marketMappings map[string]*betfair.RaceMapping // marketID → race/runner mappings
 	updateInterval time.Duration
 }
 
 // NewLivePricesService creates a new live prices service
-func NewLivePricesService(db *sqlx.DB, bfClient *betfair.Client, updateInterval time.Duration) *LivePricesService {
+func NewLivePricesService(db *sqlx.DB, appKey, username, password string, updateInterval time.Duration) *LivePricesService {
 	return &LivePricesService{
 		db:             db,
-		bfClient:       bfClient,
-		matcher:        betfair.NewMatcher(bfClient),
+		appKey:         appKey,
+		username:       username,
+		password:       password,
 		marketMappings: make(map[string]*betfair.RaceMapping),
 		updateInterval: updateInterval,
 	}
@@ -68,6 +70,21 @@ func (s *LivePricesService) Run(ctx context.Context) error {
 
 // fetchAndUpdate fetches current prices and updates database
 func (s *LivePricesService) fetchAndUpdate(ctx context.Context) error {
+	// Fresh login each cycle (same as manual updater - prevents ANGX-0001)
+	log.Printf("[LivePrices] Logging in with username: %s", s.username)
+	auth := betfair.NewAuthenticator(s.appKey, s.username, s.password)
+	sessionToken, err := auth.Login()
+	if err != nil {
+		return fmt.Errorf("betfair login failed: %w", err)
+	}
+	log.Printf("[LivePrices] ✅ Login successful, token: %s...", sessionToken[:20])
+
+	// Brief pause after login (Betfair rate limiting)
+	time.Sleep(500 * time.Millisecond)
+
+	// Create fresh client with new session token
+	bfClient := betfair.NewClient(s.appKey, sessionToken)
+
 	// Get all market IDs
 	marketIDs := make([]string, 0, len(s.marketMappings))
 	for marketID := range s.marketMappings {
@@ -75,7 +92,7 @@ func (s *LivePricesService) fetchAndUpdate(ctx context.Context) error {
 	}
 
 	// Fetch live market books
-	marketBooks, err := s.bfClient.ListMarketBook(ctx, marketIDs)
+	marketBooks, err := bfClient.ListMarketBook(ctx, marketIDs)
 	if err != nil {
 		return fmt.Errorf("fetch market books: %w", err)
 	}

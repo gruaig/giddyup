@@ -33,15 +33,15 @@ type RaceWithRunners struct {
 
 // MeetingWithRaces represents a meeting (course + date) with its races
 type MeetingWithRaces struct {
-	RaceDate       string  `json:"race_date"`
-	Region         string  `json:"region"`
-	CourseID       *int64  `json:"course_id,omitempty"`
-	CourseName     *string `json:"course_name,omitempty"`
-	RaceCount      int     `json:"race_count"`
-	FirstRaceTime  *string `json:"first_race_time,omitempty"`
-	LastRaceTime   *string `json:"last_race_time,omitempty"`
-	RaceTypes      *string `json:"race_types,omitempty"` // e.g., "Flat, Chase"
-	Races          []Race  `json:"races"`
+	RaceDate      string  `json:"race_date"`
+	Region        string  `json:"region"`
+	CourseID      *int64  `json:"course_id,omitempty"`
+	CourseName    *string `json:"course_name,omitempty"`
+	RaceCount     int     `json:"race_count"`
+	FirstRaceTime *string `json:"first_race_time,omitempty"`
+	LastRaceTime  *string `json:"last_race_time,omitempty"`
+	RaceTypes     *string `json:"race_types,omitempty"` // e.g., "Flat, Chase"
+	Races         []Race  `json:"races"`
 }
 
 // RaceFilters represents search filters for races
