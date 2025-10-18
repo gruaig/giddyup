@@ -6,6 +6,8 @@ import (
 
 	"giddyup/api/internal/database"
 	"giddyup/api/internal/models"
+
+	"github.com/lib/pq"
 )
 
 type RaceRepository struct {
@@ -174,6 +176,74 @@ func (r *RaceRepository) GetRaceByID(raceID int64) (*models.RaceWithRunners, err
 	return result, nil
 }
 
+// GetRunnersForRaces returns all runners for multiple races in a single query (optimized)
+func (r *RaceRepository) GetRunnersForRaces(raceIDs []int64) ([]models.Runner, error) {
+	if len(raceIDs) == 0 {
+		return []models.Runner{}, nil
+	}
+
+	query := `
+		SELECT 
+			ru.runner_id, ru.runner_key, ru.race_id, ru.race_date,
+			ru.horse_id, h.horse_name,
+			ru.trainer_id, t.trainer_name,
+			ru.jockey_id, j.jockey_name,
+			ru.owner_id, o.owner_name,
+			ru.num, ru.pos_raw, ru.pos_num, ru.draw, ru.ovr_btn, ru.btn,
+			ru.age, ru.sex, ru.lbs, ru.hg, ru.time_raw, ru.secs, ru.dec,
+			ru.prize, ru."or", ru.rpr, ru.comment,
+			ru.win_bsp, ru.win_ppwap, ru.win_morningwap, ru.win_ppmax, ru.win_ppmin,
+			ru.win_ipmax, ru.win_ipmin, ru.win_morning_vol, ru.win_pre_vol, ru.win_ip_vol, ru.win_lose,
+			ru.place_bsp, ru.place_ppwap, ru.place_morningwap, ru.place_ppmax, ru.place_ppmin,
+			ru.place_ipmax, ru.place_ipmin, ru.place_morning_vol, ru.place_pre_vol, ru.place_ip_vol, ru.place_win_lose,
+			bl.sire, bl.dam, bl.damsire,
+			ru.win_flag,
+			ru.price_updated_at
+		FROM racing.runners ru
+		LEFT JOIN racing.horses h ON h.horse_id = ru.horse_id
+		LEFT JOIN racing.trainers t ON t.trainer_id = ru.trainer_id
+		LEFT JOIN racing.jockeys j ON j.jockey_id = ru.jockey_id
+		LEFT JOIN racing.owners o ON o.owner_id = ru.owner_id
+		LEFT JOIN racing.bloodlines bl ON bl.blood_id = ru.blood_id
+		WHERE ru.race_id = ANY($1)
+		ORDER BY ru.race_id, ru.num
+	`
+
+	rows, err := r.db.Query(query, pq.Array(raceIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var runners []models.Runner
+	for rows.Next() {
+		var runner models.Runner
+		err := rows.Scan(
+			&runner.RunnerID, &runner.RunnerKey, &runner.RaceID, &runner.RaceDate,
+			&runner.HorseID, &runner.HorseName,
+			&runner.TrainerID, &runner.TrainerName,
+			&runner.JockeyID, &runner.JockeyName,
+			&runner.OwnerID, &runner.OwnerName,
+			&runner.Num, &runner.PosRaw, &runner.PosNum, &runner.Draw, &runner.OvrBTN, &runner.BTN,
+			&runner.Age, &runner.Sex, &runner.Lbs, &runner.HG, &runner.TimeRaw, &runner.Secs, &runner.Dec,
+			&runner.Prize, &runner.OR, &runner.RPR, &runner.Comment,
+			&runner.WinBSP, &runner.WinPPWAP, &runner.WinMorningWAP, &runner.WinPPMax, &runner.WinPPMin,
+			&runner.WinIPMax, &runner.WinIPMin, &runner.WinMorningVol, &runner.WinPreVol, &runner.WinIPVol, &runner.WinLose,
+			&runner.PlaceBSP, &runner.PlacePPWAP, &runner.PlaceMorningWAP, &runner.PlacePPMax, &runner.PlacePPMin,
+			&runner.PlaceIPMax, &runner.PlaceIPMin, &runner.PlaceMorningVol, &runner.PlacePreVol, &runner.PlaceIPVol, &runner.PlaceWinLose,
+			&runner.Sire, &runner.Dam, &runner.Damsire,
+			&runner.WinFlag,
+			&runner.PriceUpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		runners = append(runners, runner)
+	}
+
+	return runners, rows.Err()
+}
+
 // GetRaceRunners returns all runners for a race
 func (r *RaceRepository) GetRaceRunners(raceID int64) ([]models.Runner, error) {
 	query := `
@@ -283,6 +353,24 @@ func (r *RaceRepository) GetRacesByMeetings(date string) ([]models.MeetingWithRa
 		return nil, err
 	}
 
+	// Collect all race IDs
+	raceIDs := make([]int64, len(races))
+	for i, race := range races {
+		raceIDs[i] = race.RaceID
+	}
+
+	// Fetch ALL runners for ALL races in ONE query (much faster!)
+	allRunners, err := r.GetRunnersForRaces(raceIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Group runners by race_id
+	runnersByRace := make(map[int64][]models.Runner)
+	for _, runner := range allRunners {
+		runnersByRace[runner.RaceID] = append(runnersByRace[runner.RaceID], runner)
+	}
+
 	// Group races by course
 	meetingsMap := make(map[int64]*models.MeetingWithRaces)
 
@@ -306,15 +394,9 @@ func (r *RaceRepository) GetRacesByMeetings(date string) ([]models.MeetingWithRa
 			}
 		}
 
-		// Add race to meeting
+		// Add race to meeting with its runners
 		meeting := meetingsMap[courseKey]
-
-		// Fetch runners for this race
-		runners, err := r.GetRaceRunners(race.RaceID)
-		if err == nil {
-			race.Runners = runners
-		}
-
+		race.Runners = runnersByRace[race.RaceID] // Get pre-fetched runners
 		meeting.Races = append(meeting.Races, race)
 	}
 

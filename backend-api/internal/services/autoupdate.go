@@ -277,7 +277,7 @@ func (s *AutoUpdateService) startLivePrices(dateStr string) error {
 	}
 
 	// Start live prices service (pass credentials for fresh login each cycle)
-	log.Printf("[AutoUpdate] DEBUG: Passing credentials to LivePrices - appKey: %s, username: %s, password: %s", 
+	log.Printf("[AutoUpdate] DEBUG: Passing credentials to LivePrices - appKey: %s, username: %s, password: %s",
 		appKey, username, maskPassword(password))
 	livePrices := NewLivePricesService(s.db, appKey, username, password, time.Duration(intervalSecs)*time.Second)
 	livePrices.SetMarketMappings(mappings)
