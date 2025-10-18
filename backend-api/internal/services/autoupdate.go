@@ -176,6 +176,21 @@ func (s *AutoUpdateService) handleTodaysRaces() {
 
 // backfillRacecards fetches and inserts racecards (preliminary data) - FORCE REFRESH for today/tomorrow
 func (s *AutoUpdateService) backfillRacecards(dateStr string, forceRefresh bool) (int, int, error) {
+	// Check if this date already has complete data (prelim=false from master files)
+	var hasCompleteData bool
+	err := s.db.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM racing.races 
+			WHERE race_date = $1 AND prelim = false
+			LIMIT 1
+		)
+	`, dateStr).Scan(&hasCompleteData)
+	
+	if err == nil && hasCompleteData {
+		log.Printf("[AutoUpdate]   ⏭️  Skipping %s - already has complete results data", dateStr)
+		return 0, 0, nil
+	}
+
 	// DON'T delete - just upsert to preserve prices set by live updater
 	// The ON CONFLICT clauses in insertToDatabase will update race metadata without wiping prices
 	if forceRefresh {
